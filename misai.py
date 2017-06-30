@@ -170,6 +170,58 @@ class Parser:
         return {'type': 'body', 'nodes': self.subparse()}
 
 
+class Interpreter:
+    def __init__(self, tree):
+        self.tree = tree
+
+    def visit_nodes(self, nodes):
+        result = ''
+        for subnode in nodes:
+            result += str(getattr(self, 'visit_' + subnode['type'])(subnode))
+        return result
+
+    def visit_expr(self, node):
+        return self.visit_id(node)
+
+    def visit_id(self, node):
+        return self.context[node['value']]
+
+    def visit_raw(self, node):
+        return node['value']
+
+    def visit_if(self, node):
+        test = self.visit_expr(node['test'])
+        if test:
+            return self.visit_nodes(node['body'])
+        elif node.get('else'):
+            return self.visit_nodes(node['else'])
+
+    def visit_for(self, node):
+        result = ''
+        iter = self.visit_expr(node['iter'])
+        for i in iter:
+            old_context = self.context
+            new_context = {}
+            new_context.update(self.context)
+            new_context[node['target']['value']] = i
+            self.context = new_context
+            result += self.visit_nodes(node['body'])
+            self.context = old_context
+        return result
+
+    def visit_body(self, node):
+        return self.visit_nodes(node['nodes'])
+
+    def run(self, context):
+        self.context = context
+        return self.visit_body(self.tree)
+
+
 def parse(template):
     return Parser(template).parse()
+
+
+def render(template, context=None):
+    tree = parse(template)
+    return Interpreter(tree).run(context)
 
