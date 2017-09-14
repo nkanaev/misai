@@ -2,13 +2,13 @@ import re
 import collections
 
 
-Token = collections.namedtuple('Token', ['type', 'name', 'pos'])
+Token = collections.namedtuple('Token', ['type', 'value', 'pos'])
 
 
 class TemplateSyntaxError(Exception): pass
 
 
-def itertoken(template, ldelim='{{', rdelim='}}'):
+def tokenize(template, ldelim='{{', rdelim='}}'):
     c = re.compile
     ldelim = re.escape(ldelim)
     rdelim = re.escape(rdelim)
@@ -21,153 +21,204 @@ def itertoken(template, ldelim='{{', rdelim='}}'):
         'block': [
             (c(rdelim), 'rdelim'),
             (c(r'\s+'), 'ws'),
+
+            # keywords
+            (c(r'#if'), '#if'),
+            (c(r'#for'), '#for'),
+            (c(r'#elseif'), '#elseif'),
+            (c(r'#else'), '#else'),
+            (c(r'#endif'), '#endif'),
+            (c(r'#endfor'), '#endfor'),
+
+            # one/two character tokens
             (c(r'\.'), 'dot'),
             (c(r'\['), 'lsquare'),
             (c(r'\]'), 'rsquare'),
-            (c(r'".+"'), 'str'),
-            (c(r'#if'), 'keyword'),
-            (c(r'#for'), 'keyword'),
-            (c(r'#elseif'), 'keyword'),
-            (c(r'#else'), 'keyword'),
-            (c(r'#endif'), 'keyword'),
-            (c(r'#endfor'), 'keyword'),
             (c(r':'), 'colon'),
-            (c(r'\+|\-|\*|\/'), 'operator'),
+            (c(r'==|!=|<=|>=|<|>'), None),
+            (c(r'\+|\-|\*|\/'), None),
+
+            # literals
+            (c(r'\d+'), 'int'),
+            (c(r'".+"'), 'str'),
             (c(r'\b\w+\b'), 'id'),
-        ]
+       ]
     }
     inside_delim = False
     pos = 0
     while pos < len(template):
         for regex, name in rules['block' if inside_delim else 'root']:
+            #print(inside_delim, regex, repr(template[pos:pos+9]))
             m = regex.match(template, pos)
             if not m:
                 continue
 
             if pos == m.end() and name != 'ldelim':
+                # should not never happen
                 msg = '{} yielded empty string'.format(regex)
                 raise TemplateSyntaxError(msg)
 
             pos = m.end()
 
-            if not inside_delim:
+            name = name or m.group()
+
+            if inside_delim and name == 'ws':
+                break
+
+            if inside_delim:
+                yield Token(name, m.group(), pos)
+                if name == 'rdelim':
+                    inside_delim = False
+                break
+            else:
                 if name != 'comment' and m.group(1):
                     yield Token('raw', m.group(1), pos)
                 if name == 'ldelim':
-                    inside_delim = True
                     yield Token('ldelim', ldelim, pos)
-                break
-            else:
-                if name != 'ws':
-                    yield Token(name, m.group(), pos)
-                    if name == 'rdelim':
-                        inside_delim = False
+                    inside_delim = True
                 break
         else:
             msg = 'unexpected char {} at {}'.format(repr(template[pos]), pos)
             raise TemplateSyntaxError(msg)
+    yield Token('eof', None, pos)
+
+
+class LookupIter:
+    def __init__(self, iter):
+        self.iter = iter
+        self.cache = collections.deque()
+
+    @property
+    def lookup(self):
+        if not self.cache:
+            self.cache.append(next(self.iter))
+        return self.cache[0]
+
+    def expect(self, token_type, ignore=False):
+        if self.lookup.type != token_type:
+            raise TemplateSyntaxError('expected {}'.format(token_type))
+        if ignore:
+            self.next()
+
+    def next(self):
+        return self.cache.popleft() if self.cache else next(self.iter)
 
 
 class Parser:
     def __init__(self, template):
-        self.template = template
-        self.tokeniter = itertoken(template)
-        self.cache = collections.deque()
+        self.tokeniter = LookupIter(tokenize(template))
 
     def fail(self, msg):
         raise TemplateSyntaxError(msg)
 
-    @property
-    def current_token(self):
-        if not self.cache:
-            self.cache.append(next(self.tokeniter, Token(None, None, None)))
-        return self.cache[0]
-
-    def next_token(self):
-        if self.cache:
-            return self.cache.popleft()
-        return next(self.tokeniter, None)
-
-    def expect_token(self, token_type):
-        if self.current_token.type != token_type:
-            self.fail('expected {}'.format(token_type))
-
     def parse_if(self):
+        self.tokeniter.expect('#if', ignore=True)
         result = node = {'type': 'if'}
         while 1:
             node['test'] = self.parse_expr()
-            self.expect_token('rdelim')
-            self.next_token()
-            node['body'] = self.subparse(until=['#else', '#elseif', '#endif'])
-            if self.current_token.name == '#elseif':
-                self.next_token()
+            self.tokeniter.expect('rdelim', ignore=True)
+            node['body'] = self.parse(until=['#else', '#elseif', '#endif'])
+            if self.tokeniter.lookup.type == '#elseif':
+                self.tokeniter.next()
                 subnode = {'type': 'if'}
                 node['else'] = subnode
                 node = subnode
                 continue
-            elif self.current_token.name == '#else':
-                self.next_token()
-                self.expect_token('rdelim')
-                self.next_token()
-                node['else'] = self.subparse(until=['#endif'])
-                self.next_token()
-            elif self.current_token.name == '#endif':
-                self.next_token()
+            elif self.tokeniter.lookup.type == '#else':
+                self.tokeniter.next()
+                self.tokeniter.expect('rdelim', ignore=True)
+                node['else'] = self.parse(until=['#endif'])
+                self.tokeniter.next()
+                self.tokeniter.expect('rdelim', ignore=True)
+            elif self.tokeniter.lookup.type == '#endif':
+                self.tokeniter.next()
+                self.tokeniter.expect('rdelim', ignore=True)
             break
         return result
 
     def parse_for(self):
+        self.tokeniter.expect('#for', ignore=True)
         result = {'type': 'for'}
         result['target'] = self.parse_id()
-        self.expect_token('colon')
-        self.next_token()
-        result['iter'] = self.parse_id()
-        self.expect_token('rdelim')
-        self.next_token()
-        result['body'] = self.subparse(until=['#endfor'])
-        self.next_token()
+        self.tokeniter.expect('colon', ignore=True)
+        result['iter'] = self.parse_expr()
+        self.tokeniter.expect('rdelim', ignore=True)
+        result['body'] = self.parse(until=['#endfor'])
+        self.tokeniter.next()
+        self.tokeniter.expect('rdelim', ignore=True)
         return result
 
     def parse_expr(self):
-        return self.parse_id()
+        return self.parse_eq()
+
+    def parse_eq(self):
+        left = self.parse_comparison()
+        while self.tokeniter.lookup.type in {'==', '!='}:
+            self.tokeniter.next()
+            right = self.parse_comparison()
+            left = {'type': 'eq', 'left': left, 'right': right}
+        return left
+
+    def parse_comparison(self):
+        return self.parse_add()
+
+    def parse_add(self):
+        return self.parse_mul()
+
+    def parse_mul(self):
+        return self.parse_unary()
+
+    def parse_unary(self):
+        if self.tokeniter.lookup.type in {'-', '!'}:
+            self.tokeniter.next()
+            return {'type': 'unary', 'value': self.parse_unary()}
+        return self.parse_primary()
+
+    def parse_primary(self):
+        lookup = self.tokeniter.lookup
+        if lookup.type == 'id':
+            return self.parse_id()
+        elif lookup.type == 'int':
+            token = self.tokeniter.next()
+            return {'type': 'num', 'value': token.value}
+        elif lookup.type == 'str':
+            token = self.tokeniter.next()
+            return {'type': 'str', 'value': token.value}
+        elif lookup.type == 'lparen':
+            self.tokeniter.next()
+            expr = self.parse_expr()
+            self.tokeniter.expect('rparen', ignore=True)
+            return expr
+        else:
+            raise TemplateSyntaxError('unexpected token {}'.format(lookup.value))
 
     def parse_id(self):
-        if self.current_token.type != 'id':
-            self.fail('Unexpected token, expecting id')
-        node = self.next_token()
-        return {'type': 'id', 'value': node.name}
+        self.tokeniter.expect('id')
+        token = self.tokeniter.next()
+        return {'type': 'id', 'value': token.value}
 
-    def subparse(self, until=None):
+    def parse(self, until=None):
         nodes = []
         while True:
-            if self.current_token.type == 'raw':
-                nodes.append({'type': 'raw', 'value': self.next_token().name})
-            elif self.current_token.type == 'ldelim':
-                self.next_token()  # ignore left delimiter
-                if self.current_token.type == 'keyword':
-                    if until and self.current_token.name in until:
-                        return nodes
-                    elif self.current_token.name == '#if':
-                        self.next_token()
-                        nodes.append(self.parse_if())
-                    elif self.current_token.name == '#for':
-                        self.next_token()
-                        nodes.append(self.parse_for())
+            token = self.tokeniter.next()
+            if token.type == 'raw':
+                nodes.append({'type': 'raw', 'value': token.value})
+            elif token.type == 'ldelim':
+                token = self.tokeniter.lookup
+                if token.type == '#if':
+                    nodes.append(self.parse_if())
+                elif token.type == '#for':
+                    nodes.append(self.parse_for())
+                elif until and token.type in until:
+                    break
                 else:
                     nodes.append(self.parse_expr())
-
-                if self.current_token.type == None:
-                    break
-                self.expect_token('rdelim')
-                self.next_token()  # ignore right delimiter
-            elif self.current_token.type == None:
+            elif token.type == 'eof':
                 break
             else:
-                self.fail('unknown parser error')
+                # should never happen
+                raise Exception('unknown parser error')
         return nodes
-
-    def parse(self):
-        return {'type': 'body', 'nodes': self.subparse()}
 
 
 class Interpreter:
