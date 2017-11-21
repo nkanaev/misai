@@ -1,4 +1,5 @@
 import re
+import operator
 import collections
 
 
@@ -36,7 +37,7 @@ def tokenize(template, ldelim='{{', rdelim='}}'):
             (c(r'\]'), 'rsquare'),
             (c(r':'), 'colon'),
             (c(r'==|!=|<=|>=|<|>'), None),
-            (c(r'\+|\-|\*|\/'), None),
+            (c(r'\+|\-|\*|\/|\%'), None),
 
             # literals
             (c(r'\d+'), 'int'),
@@ -48,7 +49,6 @@ def tokenize(template, ldelim='{{', rdelim='}}'):
     pos = 0
     while pos < len(template):
         for regex, name in rules['block' if inside_delim else 'root']:
-            #print(inside_delim, regex, repr(template[pos:pos+9]))
             m = regex.match(template, pos)
             if not m:
                 continue
@@ -101,7 +101,8 @@ class LookupIter:
             self.next()
 
     def next(self):
-        return self.cache.popleft() if self.cache else next(self.iter)
+        x = self.cache.popleft() if self.cache else next(self.iter)
+        return x
 
 
 class Parser:
@@ -154,9 +155,9 @@ class Parser:
     def parse_eq(self):
         left = self.parse_comparison()
         while self.tokeniter.lookup.type in {'==', '!='}:
-            self.tokeniter.next()
+            token = self.tokeniter.next()
             right = self.parse_comparison()
-            left = {'type': 'eq', 'left': left, 'right': right}
+            left = {'type': 'binop', 'left': left, 'right': right, 'op': token.type}
         return left
 
     def parse_comparison(self):
@@ -166,7 +167,12 @@ class Parser:
         return self.parse_mul()
 
     def parse_mul(self):
-        return self.parse_unary()
+        left = self.parse_unary()
+        while self.tokeniter.lookup.type in {'*', '/', '%'}:
+            token = self.tokeniter.next()
+            right = self.parse_unary()
+            left = {'type': 'binop', 'left': left, 'right': right, 'op': token.type}
+        return left
 
     def parse_unary(self):
         if self.tokeniter.lookup.type in {'-', '!'}:
@@ -213,6 +219,7 @@ class Parser:
                     break
                 else:
                     nodes.append(self.parse_expr())
+                    self.tokeniter.expect('rdelim', ignore=True)
             elif token.type == 'eof':
                 break
             else:
@@ -222,17 +229,29 @@ class Parser:
 
 
 class Interpreter:
-    def __init__(self, tree):
-        self.tree = tree
+    operators = {
+        '+': operator.add,
+        '-': operator.sub,
+        '*': operator.mul,
+        '/': operator.truediv,
+        '%': operator.mod,
+        '!=': operator.ne,
+        '==': operator.eq,
+        '>=': operator.le,
+        '<=': operator.ge,
+    }
 
-    def visit_nodes(self, nodes):
-        result = ''
-        for subnode in nodes:
-            result += str(getattr(self, 'visit_' + subnode['type'])(subnode))
-        return result
+    def __init__(self, ast, loader=None):
+        self.ast = ast
+        self.loader = None
 
-    def visit_expr(self, node):
-        return self.visit_id(node)
+    def visit_binop(self, node):
+        left = self.visit(node['left'])
+        right = self.visit(node['right'])
+        return self.operators[node['op']](left, right)
+
+    def visit_num(self, node):
+        return int(node['value'])
 
     def visit_id(self, node):
         return self.context[node['value']]
@@ -241,38 +260,48 @@ class Interpreter:
         return node['value']
 
     def visit_if(self, node):
-        test = self.visit_expr(node['test'])
+        test = self.visit(node['test'])
         if test:
-            return self.visit_nodes(node['body'])
+            return self.visit(node['body'])
         elif node.get('else'):
-            return self.visit_nodes(node['else'])
+            return self.visit(node['else'])
 
     def visit_for(self, node):
-        result = ''
-        iter = self.visit_expr(node['iter'])
+        result = []
+        iter = self.visit(node['iter'])
         for i in iter:
             old_context = self.context
             new_context = {}
             new_context.update(self.context)
             new_context[node['target']['value']] = i
             self.context = new_context
-            result += self.visit_nodes(node['body'])
+            result.append(self.visit(node['body']))
             self.context = old_context
-        return result
+        return ''.join(result)
 
-    def visit_body(self, node):
-        return self.visit_nodes(node['nodes'])
+    def visit(self, node):
+        if isinstance(node, list):
+            result = []
+            for n in node:
+                visitor = getattr(self, 'visit_' + n['type'])
+                result.append(visitor(n))
+            return ''.join(map(str, result))
 
-    def run(self, context):
+        visitor = getattr(self, 'visit_' + node['type'])
+        return visitor(node)
+
+    def eval(self, context):
         self.context = context
-        return self.visit_body(self.tree)
+        x = self.visit(self.ast)
+        return x
 
 
-def parse(template):
-    return Parser(template).parse()
+class Loader:
+    def __init__(self):
+        pass
 
 
 def render(template, context=None):
-    tree = parse(template)
-    return Interpreter(tree).run(context)
+    ast = Parser(template).parse()
+    return Interpreter(ast).eval(context)
 
