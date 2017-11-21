@@ -199,30 +199,29 @@ class Parser:
         lookup = self.tokeniter.lookup
         if lookup.type == 'int':
             token = self.tokeniter.next()
-            return {'type': 'num', 'value': token.value}
+            node = {'type': 'num', 'value': token.value}
         elif lookup.type == 'str':
             token = self.tokeniter.next()
-            return {'type': 'str', 'value': token.value}
+            node = {'type': 'str', 'value': token.value}
         elif lookup.type == 'lparen':
             self.tokeniter.next()
             expr = self.parse_expr()
             self.tokeniter.expect('rparen', ignore=True)
-            return expr
+            node = expr
         else:
-            return self.parse_attr()
+            node = self.parse_id()
 
-    def parse_attr(self):
-        node = self.parse_id()
-        if self.tokeniter.lookup.type == 'dot':
-            self.tokeniter.next()
-            return {'type': 'attr', 'value': node, 'attr': self.parse_attr()}
-        elif self.tokeniter.lookup.type == 'lsquare':
-            self.tokeniter.next()
-            index = self.parse_expr()
-            self.tokeniter.expect('rsquare', ignore=True)
-            return {'type': 'index', 'value': node, 'index': index}
-        else:
-            return node
+        # subscript
+        while self.tokeniter.lookup.type in {'dot', 'lsquare'}:
+            if self.tokeniter.lookup.type == 'dot':
+                self.tokeniter.next()
+                node = {'type': 'attr', 'value': node, 'attr': self.parse_id()}
+            else:
+                self.tokeniter.next()
+                node = {'type': 'index', 'value': node, 'index': self.parse_expr()}
+                self.tokeniter.expect('rsquare', ignore=True)
+
+        return node
 
     def parse_id(self):
         self.tokeniter.expect('id')
