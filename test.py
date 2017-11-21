@@ -8,16 +8,29 @@ def test_variables():
     result = 'hello world'
     assert r(tmpl, data) == result
 
-    # todo: attr getter
     data = {'foo': {'bar': 'baz'}}
     tmpl = '{{ foo.bar }}'
     result = 'baz'
     assert r(tmpl, data) == result
 
-    # todo: index getter
     data = {'foo': [0, 1, 2]}
     tmpl = '{{ foo[1] }}'
     result = '1'
+    assert r(tmpl, data) == result
+
+    data = {}
+    tmpl = '{{ 1 + 2 }}'
+    result = '3'
+    assert r(tmpl, data) == result
+
+    data = {}
+    tmpl = '{{ 2 * 3 }}'
+    result = '6'
+    assert r(tmpl, data) == result
+
+    data = {}
+    tmpl = '{{ 1 + 2 * 3 / 4 }}'
+    result = '2.5'
     assert r(tmpl, data) == result
 
 

@@ -100,7 +100,8 @@ class LookupIter:
 
     def expect(self, token_type, ignore=False):
         if self.lookup.type != token_type:
-            raise TemplateSyntaxError('expected {}'.format(token_type))
+            raise TemplateSyntaxError(
+                'expected {}, got {}'.format(token_type, self.lookup.type))
         if ignore:
             self.next()
 
@@ -165,10 +166,20 @@ class Parser:
         return left
 
     def parse_comparison(self):
-        return self.parse_add()
+        left = self.parse_add()
+        while self.tokeniter.lookup.type in {'<', '>', '<=', '>='}:
+            token = self.tokeniter.next()
+            right = self.parse_add()
+            left = {'type': 'binop', 'left': left, 'right': right, 'op': token.type}
+        return left
 
     def parse_add(self):
-        return self.parse_mul()
+        left = self.parse_mul()
+        while self.tokeniter.lookup.type in {'+', '-'}:
+            token = self.tokeniter.next()
+            right = self.parse_mul()
+            left = {'type': 'binop', 'left': left, 'right': right, 'op': token.type}
+        return left
 
     def parse_mul(self):
         left = self.parse_unary()
