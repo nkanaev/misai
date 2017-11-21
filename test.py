@@ -18,6 +18,18 @@ def test_variables():
     result = '1'
     assert r(tmpl, data) == result
 
+    data = {'foo': {'bar': [0, 1, 2]}}
+    tmpl = '{{ foo.bar[1] }}'
+    result = '1'
+    assert r(tmpl, data) == result
+
+    data = {'foo': [{'bar': 'baz'}]}
+    tmpl = '{{ foo[0].bar }}'
+    result = 'baz'
+    assert r(tmpl, data) == result
+
+
+def test_expressions():
     data = {}
     tmpl = '{{ 1 + 2 }}'
     result = '3'
