@@ -6,7 +6,11 @@ import collections
 Token = collections.namedtuple('Token', ['type', 'value', 'pos'])
 
 
-class TemplateSyntaxError(Exception): pass
+class TemplateSyntaxError(Exception):
+    pass
+
+class RuntimeError(Exception):
+    pass
 
 
 def tokenize(template, ldelim='{{', rdelim='}}'):
@@ -182,9 +186,7 @@ class Parser:
 
     def parse_primary(self):
         lookup = self.tokeniter.lookup
-        if lookup.type == 'id':
-            return self.parse_id()
-        elif lookup.type == 'int':
+        if lookup.type == 'int':
             token = self.tokeniter.next()
             return {'type': 'num', 'value': token.value}
         elif lookup.type == 'str':
@@ -196,7 +198,20 @@ class Parser:
             self.tokeniter.expect('rparen', ignore=True)
             return expr
         else:
-            raise TemplateSyntaxError('unexpected token {}'.format(lookup.value))
+            return self.parse_attr()
+
+    def parse_attr(self):
+        node = self.parse_id()
+        if self.tokeniter.lookup.type == 'dot':
+            self.tokeniter.next()
+            return {'type': 'attr', 'value': node, 'attr': self.parse_attr()}
+        elif self.tokeniter.lookup.type == 'lsquare':
+            self.tokeniter.next()
+            index = self.parse_expr()
+            self.tokeniter.expect('rsquare', ignore=True)
+            return {'type': 'index', 'value': node, 'index': index}
+        else:
+            return node
 
     def parse_id(self):
         self.tokeniter.expect('id')
@@ -255,6 +270,28 @@ class Interpreter:
 
     def visit_id(self, node):
         return self.context[node['value']]
+
+    def visit_attr(self, node):
+        value = self.visit(node['value'])
+        while True:
+            value = getattr(
+                value,
+                node['attr']['value'],
+                value[node['attr']['value']])
+            if node['attr']['type'] == 'attr':
+                node = node['attr']
+            elif node['attr']['type'] == 'id':
+                break
+        return value
+
+    def visit_index(self, node):
+        value = self.visit(node['value'])
+        idx = self.visit(node['index'])
+        if not isinstance(idx, int):
+            raise RuntimeError('expected int')
+        if not isinstance(value, (list, tuple)):
+            raise RuntimeError('expected list object')
+        return value[idx]
 
     def visit_raw(self, node):
         return node['value']
