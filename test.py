@@ -68,8 +68,12 @@ def test_conditionals():
         yes
         {{ #endif }}
     ''')
-    result = 'yes'
-    assert r(tmpl, data) == result, 'tag lines must be stripped'
+    result = d('''\
+
+        yes
+
+    ''')
+    assert r(tmpl, data) == result
 
 
 def test_loops():
@@ -84,11 +88,15 @@ def test_loops():
         {{ #endfor }}
     ''')
     result = d('''\
+
         1
+
         2
+
         3
+
     ''')
-    assert r(tmpl, data) == result, 'tag lines must be stripped'
+    assert r(tmpl, data) == result
 
 
 if __name__ == '__main__':
