@@ -14,3 +14,9 @@ example
         {{ #endfor }}
     {{ #endif }}
 
+
+tests
+-----
+
+.. image:: https://travis-ci.org/nkanaev/misai.svg?branch=master
+    :target: https://travis-ci.org/nkanaev/misai
