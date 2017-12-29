@@ -99,6 +99,18 @@ def test_loops():
     assert r(tmpl, data) == result
 
 
+def test_scopes():
+    data = {'foo': 'bar', 'baz': [0]}
+    tmpl = '{{ #for foo : baz }}{{ foo }}{{ #endfor }}'
+    result = '0'
+    assert r(tmpl, data) == result
+
+    data = {'foo': 'bar', 'baz': [0]}
+    tmpl = '{{ #for x : baz }}{{ foo }}{{ #endfor }}'
+    result = 'bar'
+    assert r(tmpl, data) == result
+
+
 if __name__ == '__main__':
     test_variables()
     test_conditionals()
