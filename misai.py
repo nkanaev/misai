@@ -45,8 +45,9 @@ def tokenize(template, ldelim='{{', rdelim='}}'):
 
             # literals
             (c(r'\d+'), 'int'),
-            (c(r'".+"'), 'str'),
-            (c(r'\b\w+\b'), 'id'),
+            (c(r'"(.+)"'), 'str'),
+            (c(r'\'(.+)\''), 'str'),
+            (c(r'\b(\w+)\b'), 'id'),
        ]
     }
     inside_delim = False
@@ -63,23 +64,25 @@ def tokenize(template, ldelim='{{', rdelim='}}'):
                 raise TemplateSyntaxError(msg)
 
             pos = m.end()
-
             name = name or m.group()
-
-            if inside_delim and name == 'ws':
-                break
+            match = m.group(1) if m.groups() else m.group()
 
             if inside_delim:
-                yield Token(name, m.group(), pos)
+                if name == 'ws':
+                    break
+                yield Token(name, match, pos)
                 if name == 'rdelim':
                     inside_delim = False
                 break
             else:
-                if name != 'comment' and m.group(1):
-                    yield Token('raw', m.group(1), pos)
-                if name == 'ldelim':
+                if name == 'comment':
+                    break
+                elif name == 'ldelim':
+                    yield Token('raw', match, pos)
                     yield Token('ldelim', ldelim, pos)
                     inside_delim = True
+                else:
+                    yield Token(name, match, pos)
                 break
         else:
             msg = 'unexpected char {} at {}'.format(repr(template[pos]), pos)
@@ -266,14 +269,16 @@ class Interpreter:
         '<=': operator.ge,
     }
 
-    def __init__(self, ast, loader=None):
+    def __init__(self, ast):
         self.ast = ast
-        self.loader = None
 
     def visit_binop(self, node):
         left = self.visit(node['left'])
         right = self.visit(node['right'])
         return self.operators[node['op']](left, right)
+
+    def visit_str(self, node):
+        return node['value']
 
     def visit_num(self, node):
         return int(node['value'])
@@ -343,12 +348,15 @@ class Interpreter:
         return x
 
 
-class Loader:
-    def __init__(self):
-        pass
+class Template:
+    def __init__(self, content):
+        self.content = content
+        self.ast = Parser(content).parse()
+        self.interpreter = Interpreter(self.ast)
+
+    def render(self, context):
+        return self.interpreter.eval(context)
 
 
-def render(template, context=None):
-    ast = Parser(template).parse()
-    return Interpreter(ast).eval(context)
-
+def render(content, context=None):
+    return Template(content).render(context)
