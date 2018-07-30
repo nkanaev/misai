@@ -12,14 +12,16 @@ def test_delimiters():
 
 
 def test_literals():
-    lexer = Lexer(r'{{ 1 2.5 "test" "\"test\"" }}')
+    lexer = Lexer(r'''{{ 1 2.5 "test" "\"test\"" 'x' 'x\'s' }}''')
     tokens = [
         Token('ldelim', '{{', 0),
         Token('int', 1, 3),
         Token('float', 2.5, 5),
         Token('str', "test", 9),
         Token('str', '"test"', 16),
-        Token('rdelim', '}}', 27),
+        Token('str', 'x', 27),
+        Token('str', "x's", 31),
+        Token('rdelim', '}}', 38),
     ]
     assert tokens == lexer.tokens
 
