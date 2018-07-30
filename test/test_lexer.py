@@ -44,3 +44,15 @@ def test_comparison():
         Token('rdelim', '}}', 36),
     ]
     assert tokens == lexer.tokens
+
+
+def test_ids():
+    lexer = Lexer(r'{{ hello andrew oregon }}')
+    tokens = [
+        Token('ldelim', '{{', 0),
+        Token('id', 'hello', 3),
+        Token('id', 'andrew', 9),
+        Token('id', 'oregon', 16),
+        Token('rdelim', '}}', 23),
+    ]
+    assert tokens == lexer.tokens

@@ -97,8 +97,6 @@ class Lexer:
                             .replace(r'\"', '"')\
                             .replace(r"\'", "'")
 
-                    print('shit', name, repr(match), repr(value), pos_prev)
-
                     yield Token(name, value, pos_prev)
 
                     break
