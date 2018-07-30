@@ -56,3 +56,14 @@ def test_ids():
         Token('rdelim', '}}', 23),
     ]
     assert tokens == lexer.tokens
+
+
+def test_keywords():
+    lexer = Lexer(r'{{ #for #endfor }}')
+    tokens = [
+        Token('ldelim', '{{', 0),
+        Token('keyword', '#for', 3),
+        Token('keyword', '#endfor', 8),
+        Token('rdelim', '}}', 16),
+    ]
+    assert tokens == lexer.tokens
