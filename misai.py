@@ -62,7 +62,7 @@ class Lexer:
                 (c(r'"(([^"\\]|\\.)*)"'), 'str'),
                 (c(r"'(([^'\\]|\\.)*)'"), 'str'),
                 (c(r'\b(\w+)\b'), 'id'),
-           ]
+            ]
         }
         inside_delim = False
         pos = 0
@@ -142,8 +142,13 @@ class Document(Node):
         pass
 
     def render(self, context):
-        with context.stack() as subcontext:
-            pass
+        pass
+
+
+class Context:
+    def __init__(self, values, parent=None):
+        self.parent = parent
+        self.values = values
 
 
 class Template:
