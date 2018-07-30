@@ -52,9 +52,9 @@ class Lexer:
                 (c(r':'), 'colon'),
                 (c(r'\['), 'lsquare'),
                 (c(r'\]'), 'rsquare'),
-                (c(r'==|!=|<=|>=|<|>|&&'), 'binop'),
+                (c(r'==|!=|<=|>=|<|>'), 'binop'),
                 (c(r'\b(and|or)\b'), 'binop'),
-                (c(r'\+|\-|\*|\/|\%'), None),
+                (c(r'\+|\-|\*|\/|\%'), 'binop'),
 
                 # literals
                 (c(r'\d+\.\d+\b'), 'float'),
