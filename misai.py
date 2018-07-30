@@ -6,18 +6,21 @@ Token = collections.namedtuple('Token', ['type', 'value', 'pos'])
 
 
 class TemplateSyntaxError(Exception):
-    pass
+    def __init__(self, msg, source=None, pos=None):
+        self.msg = msg
+        self.source = source
+        self.pos = pos
 
 
 class Lexer:
-    def __init__(self, content):
-        self.content = content
+    def __init__(self, source):
+        self.source = source
         self.cache = collections.deque()
         self.tokens = list(self.tokenize())
         self.idx = 0
 
     def consume(self, token_type):
-        token = self.pop()
+        token = self.next()
         if token.type != token_type:
             raise TemplateSyntaxError(
                 'expected {}, got {}'.format(token_type, token.type),
@@ -25,8 +28,14 @@ class Lexer:
                 pos=token.pos)
         return token
 
-    def lookup(self):
+    def lookup(self, offset=0):
         return self.tokens[self.idx]
+
+    def next(self):
+        i, self.idx = self.idx, self.idx + 1
+        if i >= len(self.tokens):
+            return Token('eof', None, None)
+        return self.tokens[i]
 
     def tokenize(self):
         c = re.compile
@@ -66,9 +75,9 @@ class Lexer:
         }
         inside_delim = False
         pos = 0
-        while pos < len(self.content):
+        while pos < len(self.source):
             for regex, name in rules['block' if inside_delim else 'root']:
-                m = regex.match(self.content, pos)
+                m = regex.match(self.source, pos)
                 if not m:
                     continue
 
@@ -112,15 +121,12 @@ class Lexer:
                         yield Token(name, match, pos)
                     break
             else:
-                msg = 'unexpected char {}'.format(repr(self.content[pos]))
-                raise TemplateSyntaxError(msg, pos=pos, content=self.content)
+                msg = 'unexpected char {}'.format(repr(self.source[pos]))
+                raise TemplateSyntaxError(msg, pos=pos, source=self.source)
 
 
 class Node:
-    def __init__(self):
-        self.children = []
-
-    def parse(self, tokens):
+    def parse(self, lexer):
         raise NotImplementedError
 
     def reunder(self, context):
@@ -128,19 +134,80 @@ class Node:
 
 
 class BinOp(Node):
-    def parse(self, tokens):
+    def parse(self, lexer):
         pass
 
     def render(self, context):
         pass
 
 
-class Document(Node):
-    def parse(self, tokens):
-        pass
+class RawNode(Node):
+    def __init__(self, text):
+        self.text = text
 
     def render(self, context):
+        return self.text
+
+
+class BlockNode(Node):
+    def __init__(self):
+        self.children = []
+
+    def parse(self, lexer):
+        while True:
+            token = lexer.next()
+            if token.type == 'eof':
+                break
+            elif token.type == 'raw':
+                self.children.append(RawNode(token.value))
+            elif token.type == 'ldelim':
+                if lexer.lookup().type == 'keyword':
+                    if token.value not in self.params['keywords']:
+                        raise TemplateSyntaxError(
+                            'unknown keyword: {}'.format(token.value),
+                            source=lexer.source, pos=token.pos)
+                    kw_class = self.context['keywords'][token.value]
+                    self.children.append(kw_class.parse(lexer))
+                else:
+                    self.children.append(ExpressionNode().parse(lexer))
+            else:
+                raise TemplateSyntaxError(
+                    'unexpected token: {}'.format(token.type),
+                    source=lexer.source, pos=token.pos)
+        return self
+
+    def render(self, context):
+        return ''.join([c.render(context) for c in self.children])
+
+
+class ExpressionNode(Node):
+    def parse(self, lexer):
+        print('here', lexer.lookup())
+        if lexer.lookup().type == 'id':
+            node = IdNode(lexer.next().value)
+            lexer.consume('rdelim')
+            return node
+        return self
+
+
+class IdNode(Node):
+    def __init__(self, name):
+        self.name = name
+
+    def render(self, context):
+        return context.resolve(self.name)
+
+
+class IfNode(Node):
+    def parse(self, lexer):
         pass
+
+    def render(self, lexer):
+        pass
+
+
+class Document(BlockNode):
+    pass
 
 
 class Context:
@@ -148,15 +215,23 @@ class Context:
         self.parent = parent
         self.values = values
 
+    def resolve(self, varname):
+        if varname in self.values:
+            return self.values[varname]
+        if self.parent:
+            return self.parent.resolve(varname)
+        raise RuntimeError('unresolved variable: {}'.format(varname))
+
 
 class Template:
     def __init__(self, source):
         self.source = source
-        self.root = Document.parse(Lexer(self.source))
+        self.root = Document()
+        self.root.parse(Lexer(self.source))
 
     def render(self, **context):
         return self.root.render(Context(context))
 
 
-def render(content, context):
-    return Template(content).render(**context)
+def render(source, context):
+    return Template(source).render(**context)
