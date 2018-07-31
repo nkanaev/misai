@@ -27,7 +27,7 @@ def test_literals():
 
 
 def test_comparison():
-    lexer = Lexer(r'{{ > < == != <= >= or and + - * / % }}')
+    lexer = Lexer(r'{{ > < == != <= >= or and }}')
     tokens = [
         Token('ldelim', '{{', 0),
         Token('binop', '>', 3),
@@ -38,12 +38,7 @@ def test_comparison():
         Token('binop', '>=', 16),
         Token('binop', 'or', 19),
         Token('binop', 'and', 22),
-        Token('binop', '+', 26),
-        Token('binop', '-', 28),
-        Token('binop', '*', 30),
-        Token('binop', '/', 32),
-        Token('binop', '%', 34),
-        Token('rdelim', '}}', 36),
+        Token('rdelim', '}}', 26),
     ]
     assert tokens == lexer.tokens
 

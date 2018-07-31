@@ -56,14 +56,13 @@ class Lexer:
                 # keyword
                 (c(r'#[a-z]+'), 'keyword'),
 
+                (c(r':'), 'colon'),
                 (c(r'\.'), 'dot'),
                 (c(r'\|'), 'pipe'),
-                (c(r':'), 'colon'),
                 (c(r'\['), 'lsquare'),
                 (c(r'\]'), 'rsquare'),
                 (c(r'==|!=|<=|>=|<|>'), 'binop'),
                 (c(r'\b(and|or)\b'), 'binop'),
-                (c(r'\+|\-|\*|\/|\%'), 'binop'),
 
                 # literals
                 (c(r'\d+\.\d+\b'), 'float'),
