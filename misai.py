@@ -58,7 +58,10 @@ class Lexer:
 
                 (c(r':'), 'colon'),
                 (c(r'\.'), 'dot'),
+                (c(r','), 'comma'),
                 (c(r'\|'), 'pipe'),
+                (c(r'\('), 'lround'),
+                (c(r'\)'), 'rround'),
                 (c(r'\['), 'lsquare'),
                 (c(r'\]'), 'rsquare'),
                 (c(r'==|!=|<=|>=|<|>'), 'comp'),
@@ -180,8 +183,34 @@ class BlockNode(Node):
 
 
 class ExpressionNode(Node):
+    def __init__(self, simple=False):
+        self.simple = simple
+
+    def parse_or(self, lexer):
+        pass
+
+    def parse_and(self, lexer):
+        pass
+
+    def parse_comp(self, lexer):
+        pass
+
+    def parse_attr(self, lexer):
+        pass
+
+    def parse_atom(self, lexer):
+        pass
+
+    def parse_pipe(self, lexer):
+        pass
+
+    def parse_params(self, lexer):
+        pass
+
     def parse(self, lexer):
-        print('here', lexer.lookup())
+        if self.simple:
+            pass
+
         if lexer.lookup().type == 'id':
             node = IdNode(lexer.next().value)
             lexer.consume('rdelim')

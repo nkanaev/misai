@@ -11,7 +11,7 @@ def test_delimiters():
     assert tokens == lexer.tokens
 
 
-def test_literals():
+def test_atoms():
     lexer = Lexer(r'''{{ 1 2.5 "test" "\"test\"" 'x' 'x\'s' }}''')
     tokens = [
         Token('ldelim', '{{', 0),
@@ -22,6 +22,19 @@ def test_literals():
         Token('str', 'x', 27),
         Token('str', "x's", 31),
         Token('rdelim', '}}', 38),
+    ]
+    assert tokens == lexer.tokens
+
+
+def test_pipe():
+    lexer = Lexer(r'{{ |,() }}')
+    tokens = [
+        Token('ldelim', '{{', 0),
+        Token('pipe', '|', 3),
+        Token('comma', ',', 4),
+        Token('lround', '(', 5),
+        Token('rround', ')', 6),
+        Token('rdelim', '}}', 8),
     ]
     assert tokens == lexer.tokens
 
