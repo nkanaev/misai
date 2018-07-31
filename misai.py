@@ -61,8 +61,8 @@ class Lexer:
                 (c(r'\|'), 'pipe'),
                 (c(r'\['), 'lsquare'),
                 (c(r'\]'), 'rsquare'),
-                (c(r'==|!=|<=|>=|<|>'), 'binop'),
-                (c(r'\b(and|or)\b'), 'binop'),
+                (c(r'==|!=|<=|>=|<|>'), 'comp'),
+                (c(r'\b(and|or)\b'), 'logic'),
 
                 # literals
                 (c(r'\d+\.\d+\b'), 'float'),

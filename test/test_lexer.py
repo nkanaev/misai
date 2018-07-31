@@ -30,14 +30,14 @@ def test_comparison():
     lexer = Lexer(r'{{ > < == != <= >= or and }}')
     tokens = [
         Token('ldelim', '{{', 0),
-        Token('binop', '>', 3),
-        Token('binop', '<', 5),
-        Token('binop', '==', 7),
-        Token('binop', '!=', 10),
-        Token('binop', '<=', 13),
-        Token('binop', '>=', 16),
-        Token('binop', 'or', 19),
-        Token('binop', 'and', 22),
+        Token('comp', '>', 3),
+        Token('comp', '<', 5),
+        Token('comp', '==', 7),
+        Token('comp', '!=', 10),
+        Token('comp', '<=', 13),
+        Token('comp', '>=', 16),
+        Token('logic', 'or', 19),
+        Token('logic', 'and', 22),
         Token('rdelim', '}}', 26),
     ]
     assert tokens == lexer.tokens
