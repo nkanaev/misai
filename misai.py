@@ -172,6 +172,7 @@ class BlockNode(Node):
                     self.children.append(kw_class.parse(lexer))
                 else:
                     self.children.append(ExpressionNode().parse(lexer))
+                    lexer.consume('rdelim')
             else:
                 raise TemplateSyntaxError(
                     'unexpected token: {}'.format(token.type),
@@ -182,40 +183,55 @@ class BlockNode(Node):
         return ''.join([c.render(context) for c in self.children])
 
 
+class BinopNode(Node):
+    def __init__(self, op, left, right):
+        self.op = op
+        self.left = left
+        self.right = right
+
+
+class LiteralNode(Node):
+    def __init__(self, val):
+        self.val = val
+
+    def render(self, context):
+        return self.val
+
+
 class ExpressionNode(Node):
-    def __init__(self, simple=False):
-        self.simple = simple
+    def __init__(self, mode='simple'):
+        self.mode = mode
 
     def parse_or(self, lexer):
-        pass
+        return self.parse_and(lexer)
 
     def parse_and(self, lexer):
-        pass
+        return self.parse_comp(lexer)
 
     def parse_comp(self, lexer):
-        pass
+        return self.parse_attr(lexer)
 
     def parse_attr(self, lexer):
-        pass
+        if lexer.lookup().type == 'id':
+            return IdNode(lexer.next().value)
+        return self.parse_atom(lexer)
 
     def parse_atom(self, lexer):
-        pass
+        if lexer.lookup().type in {'str', 'int', 'float'}:
+            return LiteralNode(lexer.next().value)
+        # todo: raise exception
 
     def parse_pipe(self, lexer):
-        pass
+        return self.parse_attr(lexer)
 
     def parse_params(self, lexer):
         pass
 
     def parse(self, lexer):
-        if self.simple:
-            pass
-
-        if lexer.lookup().type == 'id':
-            node = IdNode(lexer.next().value)
-            lexer.consume('rdelim')
-            return node
-        return self
+        if self.mode == 'simple':
+            return self.parse_pipe(lexer)
+        elif self.mode == 'conditional':
+            return self.parse_or(self, lexer)
 
 
 class IdNode(Node):
