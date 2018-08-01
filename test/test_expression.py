@@ -1,4 +1,14 @@
-from misai import Lexer, ExpressionNode, Context
+from misai import Lexer, ExpressionNode, Context, filter
+
+
+@filter
+def test(a, b, c):
+    return str(a) + str(b) + str(c)
+
+
+@filter
+def add(a, b):
+    return a + b
 
 
 def expr(template, params=None, mode='simple'):
@@ -18,3 +28,8 @@ def test_simple():
 
 def test_pipe():
     assert expr('{{ " foo " | strip | capitalize }}') == 'Foo'
+
+
+def test_filter_params():
+    assert expr('{{ 1 | test: "2", "3" }}') == '123'
+    assert expr('{{ 100000 | add: 500 }}') == '100500'

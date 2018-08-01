@@ -258,7 +258,7 @@ class ExpressionNode(Node):
     def parse_atom(self, lexer):
         if lexer.lookup().type in {'str', 'int', 'float'}:
             return LiteralNode(lexer.next().value)
-        # todo: raise exception
+        raise RuntimeError('expected atom')
 
     def parse_pipe(self, lexer):
         node = self.parse_attr(lexer)
@@ -270,7 +270,14 @@ class ExpressionNode(Node):
         return node
 
     def parse_params(self, lexer):
-        pass
+        params = []
+        if lexer.lookup().type == 'colon':
+            lexer.consume('colon')
+            params.append(self.parse_atom(lexer))
+            while lexer.lookup().type == 'comma':
+                lexer.consume('comma')
+                params.append(self.parse_atom(lexer))
+        return params
 
     def parse(self, lexer):
         if self.mode == 'simple':
