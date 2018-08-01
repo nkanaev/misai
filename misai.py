@@ -5,6 +5,30 @@ import collections
 Token = collections.namedtuple('Token', ['type', 'value', 'pos'])
 
 
+class Filters(dict):
+
+    def __call__(self, func=None, **params):
+        if callable(func):
+            self[func.__name__] = func
+        else:
+            def wrapper(func):
+                self[params['name']] = func
+            return wrapper
+
+
+filter = Filters()
+
+
+@filter
+def capitalize(string):
+    return string.capitalize()
+
+
+@filter
+def strip(string):
+    return string.strip()
+
+
 class TemplateSyntaxError(Exception):
     def __init__(self, msg, source=None, pos=None):
         self.msg = msg
@@ -198,6 +222,21 @@ class LiteralNode(Node):
         return self.val
 
 
+class PipeNode(Node):
+    def __init__(self, node, func, params):
+        self.node = node
+        self.func = func
+        self.params = params or []
+
+    def render(self, context):
+        if self.func not in filter:
+            raise RuntimeError('unknown filter: {}'.format(self.func))
+        callable = filter[self.func]
+        first_param = self.node.render(context)
+        params = [p.render(context) for p in self.params]
+        return callable(first_param, *params)
+
+
 class ExpressionNode(Node):
     def __init__(self, mode='simple'):
         self.mode = mode
@@ -222,16 +261,26 @@ class ExpressionNode(Node):
         # todo: raise exception
 
     def parse_pipe(self, lexer):
-        return self.parse_attr(lexer)
+        node = self.parse_attr(lexer)
+        while lexer.lookup().type == 'pipe':
+            lexer.consume('pipe')
+            filter = lexer.consume('id')
+            params = self.parse_params(lexer)
+            node = PipeNode(node, filter.value, params)
+        return node
 
     def parse_params(self, lexer):
         pass
 
     def parse(self, lexer):
         if self.mode == 'simple':
-            return self.parse_pipe(lexer)
+            self.root = self.parse_pipe(lexer)
         elif self.mode == 'conditional':
-            return self.parse_or(self, lexer)
+            self.root = self.parse_or(self, lexer)
+        return self
+
+    def render(self, context):
+        return str(self.root.render(context))
 
 
 class IdNode(Node):
