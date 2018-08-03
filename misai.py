@@ -1,4 +1,5 @@
 import re
+import operator
 import collections
 
 
@@ -175,11 +176,11 @@ class RawNode(Node):
         return self.text
 
 
-class BlockNode(Node):
+class NodeList(Node):
     def __init__(self):
         self.children = []
 
-    def parse(self, lexer):
+    def parse(self, lexer, until=None):
         while True:
             token = lexer.next()
             if token.type == 'eof':
@@ -188,12 +189,15 @@ class BlockNode(Node):
                 self.children.append(RawNode(token.value))
             elif token.type == 'ldelim':
                 if lexer.lookup().type == 'keyword':
-                    if token.value not in self.params['keywords']:
+                    if lexer.lookup().value not in Template.keywords:
+                        if until and lexer.lookup().value in until:
+                            return self
                         raise TemplateSyntaxError(
                             'unknown keyword: {}'.format(token.value),
                             source=lexer.source, pos=token.pos)
-                    kw_class = self.context['keywords'][token.value]
-                    self.children.append(kw_class.parse(lexer))
+                    token = lexer.next()
+                    kw_class = Template.keywords[token.value]
+                    self.children.append(kw_class().parse(lexer))
                 else:
                     self.children.append(ExpressionNode().parse(lexer))
                     lexer.consume('rdelim')
@@ -212,6 +216,9 @@ class BinopNode(Node):
         self.op = op
         self.left = left
         self.right = right
+
+    def render(self, context):
+        return self.op(self.left.render(context), self.right.render(context))
 
 
 class LiteralNode(Node):
@@ -238,17 +245,27 @@ class PipeNode(Node):
 
 
 class ExpressionNode(Node):
+
+    ops = {
+        '==': operator.eq,
+    }
+
     def __init__(self, mode='simple'):
         self.mode = mode
 
-    def parse_or(self, lexer):
+    def parse_or(self, lexer, *params):
         return self.parse_and(lexer)
 
     def parse_and(self, lexer):
         return self.parse_comp(lexer)
 
     def parse_comp(self, lexer):
-        return self.parse_attr(lexer)
+        node = self.parse_attr(lexer)
+        while lexer.lookup().type == 'comp':
+            token = lexer.next()
+            node = BinopNode(
+                self.ops[token.value], node, self.parse_comp(lexer))
+        return node
 
     def parse_attr(self, lexer):
         if lexer.lookup().type == 'id':
@@ -283,11 +300,14 @@ class ExpressionNode(Node):
         if self.mode == 'simple':
             self.root = self.parse_pipe(lexer)
         elif self.mode == 'conditional':
-            self.root = self.parse_or(self, lexer)
+            self.root = self.parse_or(lexer)
         return self
 
     def render(self, context):
-        return str(self.root.render(context))
+        result = self.root.render(context)
+        if self.mode == 'conditional':
+            return result
+        return str(result)
 
 
 class IdNode(Node):
@@ -299,14 +319,41 @@ class IdNode(Node):
 
 
 class IfNode(Node):
+    def __init__(self):
+        self.blocks = []
+
     def parse(self, lexer):
-        pass
+        condition = ExpressionNode('conditional').parse(lexer)
+        lexer.consume('rdelim')
+        while True:
+            body = NodeList().parse(lexer, until=['#elseif', '#else', '#endif'])
+            self.blocks.append([condition, body])
+            token = lexer.next()
+            if token.value == '#elseif':
+                condition = ExpressionNode('conditional').parse(lexer)
+                lexer.consume('rdelim')
+                continue
+            elif token.value == '#else':
+                lexer.consume('rdelim')
+                body = NodeList().parse(lexer, until=['#endif'])
+                self.blocks.append([None, body])
+                lexer.consume('keyword')
+                lexer.consume('rdelim')
+            elif token.value == '#endif':
+                lexer.consume('rdelim')
+            break
+        return self
 
-    def render(self, lexer):
-        pass
+    def render(self, context):
+        for condition, body in self.blocks:
+            if condition is None:
+                return body.render(context)
+            elif condition.render(context):
+                return body.render(context)
+        return ''
 
 
-class Document(BlockNode):
+class Document(NodeList):
     pass
 
 
@@ -324,6 +371,10 @@ class Context:
 
 
 class Template:
+    keywords = {
+        '#if': IfNode,
+    }
+
     def __init__(self, source):
         self.source = source
         self.root = Document()
