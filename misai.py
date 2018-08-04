@@ -212,6 +212,16 @@ class NodeList(Node):
 
 
 class BinopNode(Node):
+
+    ops = {
+        '==': operator.eq,
+        '!=': operator.ne,
+        '<=': operator.le,
+        '>=': operator.ge,
+        '<': operator.lt,
+        '>': operator.gt,
+    }
+
     def __init__(self, op, left, right):
         self.op = op
         self.left = left
@@ -246,10 +256,6 @@ class PipeNode(Node):
 
 class ExpressionNode(Node):
 
-    ops = {
-        '==': operator.eq,
-    }
-
     def __init__(self, mode='simple'):
         self.mode = mode
 
@@ -264,7 +270,7 @@ class ExpressionNode(Node):
         while lexer.lookup().type == 'comp':
             token = lexer.next()
             node = BinopNode(
-                self.ops[token.value], node, self.parse_comp(lexer))
+                BinopNode.ops[token.value], node, self.parse_comp(lexer))
         return node
 
     def parse_attr(self, lexer):
@@ -303,10 +309,13 @@ class ExpressionNode(Node):
             self.root = self.parse_or(lexer)
         return self
 
+    def eval(self, context):
+        return self.root.render(context)
+
     def render(self, context):
-        result = self.root.render(context)
-        if self.mode == 'conditional':
-            return result
+        result = self.eval(context)
+        if result is None:
+            return ''
         return str(result)
 
 
@@ -326,7 +335,8 @@ class IfNode(Node):
         condition = ExpressionNode('conditional').parse(lexer)
         lexer.consume('rdelim')
         while True:
-            body = NodeList().parse(lexer, until=['#elseif', '#else', '#endif'])
+            body = NodeList().parse(
+                lexer, until=['#elseif', '#else', '#endif'])
             self.blocks.append([condition, body])
             token = lexer.next()
             if token.value == '#elseif':
@@ -348,7 +358,7 @@ class IfNode(Node):
         for condition, body in self.blocks:
             if condition is None:
                 return body.render(context)
-            elif condition.render(context):
+            elif condition.eval(context):
                 return body.render(context)
         return ''
 
