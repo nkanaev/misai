@@ -33,3 +33,11 @@ def test_pipe():
 def test_filter_params():
     assert expr('{{ 1 | test: "2", "3" }}') == '123'
     assert expr('{{ 100000 | add: 500 }}') == '100500'
+
+
+def test_attr():
+    assert expr('{{ foo.bar }}', {'foo': {'bar': 'baz'}}) == 'baz'
+    assert expr('{{ foo.bar.baz }}', {'foo': {'bar': {'baz': 1}}}) == '1'
+
+    assert expr('{{ foo["bar"] }}', {'foo': {'bar': 'baz'}}) == 'baz'
+    assert expr('{{ foo["bar"][1] }}', {'foo': {'bar': [1, 2, 3]}}) == '2'

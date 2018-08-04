@@ -203,6 +203,19 @@ class NodeList(Node):
         return ''.join([c.render(context) for c in self.children])
 
 
+class AttrNode(Node):
+    def __init__(self, data, value):
+        self.data = data
+        self.name = value
+
+    def render(self, context):
+        data = self.data.render(context)
+        name = self.name.render(context)
+        if hasattr(data, '__getitem__'):
+            return data[name]
+        return getattr(data, name)
+
+
 class BinopNode(Node):
 
     ops = {
@@ -276,7 +289,17 @@ class ExpressionNode(Node):
 
     def parse_attr(self, lexer):
         if lexer.lookup().type == 'id':
-            return IdNode(lexer.next().value)
+            node = IdNode(lexer.next().value)
+            while lexer.lookup().type in {'dot', 'lsquare'}:
+                if lexer.lookup().type == 'dot':
+                    lexer.next()
+                    token = lexer.consume('id')
+                    node = AttrNode(node, LiteralNode(token.value))
+                elif lexer.lookup().type == 'lsquare':
+                    lexer.next()
+                    node = AttrNode(node, self.parse_attr(lexer))
+                    lexer.consume('rsquare')
+            return node
         return self.parse_atom(lexer)
 
     def parse_atom(self, lexer):
