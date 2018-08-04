@@ -37,3 +37,16 @@ def test_comparison():
     for source, expected in test_cases:
         template = Template(source)
         assert template.render() == expected, source
+
+
+def test_and_or():
+    test_cases = [
+        ['{{#if 1==1 and 2==2}}foo{{#endif}}', 'foo'],
+        ['{{#if 1==1 and 1==2}}foo{{#endif}}', ''],
+        ['{{#if 1==1 or 1==2}}foo{{#endif}}', 'foo'],
+        ['{{#if 1==2 or 1==2}}foo{{#endif}}', ''],
+    ]
+
+    for source, expected in test_cases:
+        template = Template(source)
+        assert template.render() == expected, source

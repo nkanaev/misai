@@ -160,14 +160,6 @@ class Node:
         raise NotImplementedError
 
 
-class BinOp(Node):
-    def parse(self, lexer):
-        pass
-
-    def render(self, context):
-        pass
-
-
 class RawNode(Node):
     def __init__(self, text):
         self.text = text
@@ -220,10 +212,12 @@ class BinopNode(Node):
         '>=': operator.ge,
         '<': operator.lt,
         '>': operator.gt,
+        'and': operator.and_,
+        'or': operator.or_,
     }
 
-    def __init__(self, op, left, right):
-        self.op = op
+    def __init__(self, op_value, left, right):
+        self.op = self.ops[op_value]
         self.left = left
         self.right = right
 
@@ -260,17 +254,24 @@ class ExpressionNode(Node):
         self.mode = mode
 
     def parse_or(self, lexer, *params):
-        return self.parse_and(lexer)
+        node = self.parse_and(lexer)
+        while lexer.lookup().value == 'or':
+            token = lexer.consume('logic')
+            node = BinopNode(token.value, node, self.parse_and(lexer))
+        return node
 
     def parse_and(self, lexer):
-        return self.parse_comp(lexer)
+        node = self.parse_comp(lexer)
+        while lexer.lookup().value == 'and':
+            token = lexer.consume('logic')
+            node = BinopNode(token.value, node, self.parse_comp(lexer))
+        return node
 
     def parse_comp(self, lexer):
         node = self.parse_attr(lexer)
         while lexer.lookup().type == 'comp':
             token = lexer.next()
-            node = BinopNode(
-                BinopNode.ops[token.value], node, self.parse_comp(lexer))
+            node = BinopNode(token.value, node, self.parse_attr(lexer))
         return node
 
     def parse_attr(self, lexer):
