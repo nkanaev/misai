@@ -387,6 +387,31 @@ class IfNode(Node):
         return ''
 
 
+class ForNode(Node):
+    def __init__(self):
+        self.target = None
+        self.iter = None
+        self.body = None
+
+    def parse(self, lexer):
+        self.target = lexer.consume('id').value
+        lexer.consume('colon')
+        self.iter = ExpressionNode().parse(lexer)
+        lexer.consume('rdelim')
+        self.body = NodeList().parse(lexer, until=['#endfor'])
+        lexer.next()
+        lexer.consume('rdelim')
+        return self
+
+    def render(self, context):
+        result = []
+        for item in self.iter.eval(context):
+            print('x', item)
+            subctx = Context({self.target: item}, context)
+            result.append(self.body.render(subctx))
+        return ''.join([str(r) for r in result])
+
+
 class Document(NodeList):
     pass
 
@@ -407,6 +432,7 @@ class Context:
 class Template:
     keywords = {
         '#if': IfNode,
+        '#for': ForNode,
     }
 
     def __init__(self, source):
