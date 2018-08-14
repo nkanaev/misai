@@ -90,6 +90,7 @@ class Lexer:
                 (c(r'\['), 'lsquare'),
                 (c(r'\]'), 'rsquare'),
                 (c(r'==|!=|<=|>=|<|>'), 'comp'),
+                (c(r'='), 'assign'),
                 (c(r'\b(and|or)\b'), 'logic'),
 
                 # literals
@@ -412,6 +413,19 @@ class ForNode(Node):
         return ''.join([str(r) for r in result])
 
 
+class AssignNode(Node):
+    def parse(self, lexer):
+        self.varname = lexer.consume('id').value
+        lexer.consume('assign')
+        self.value = ExpressionNode().parse(lexer)
+        lexer.consume('rdelim')
+        return self
+
+    def render(self, context):
+        context.values[self.varname] = self.value.eval(context)
+        return ''
+
+
 class Document(NodeList):
     pass
 
@@ -433,6 +447,7 @@ class Template:
     keywords = {
         '#if': IfNode,
         '#for': ForNode,
+        '#assign': AssignNode,
     }
 
     def __init__(self, source):
