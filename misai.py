@@ -1,3 +1,4 @@
+import ast
 import re
 import operator
 import collections
@@ -458,6 +459,122 @@ class IncludeNode(Node):
         pass
 
 
+class Compiler:
+    def __init__(self, lexer, filename='<string>'):
+        self.lexer = lexer
+        self.filename = filename
+        self.funcname = 'root'
+        # todo: getattr
+        self.getattr = 'getattr'
+        self.context = 'context'
+        self.tostr = 'tostr'
+
+    def assign(self):
+        pass
+
+    def loop(self):
+        pass
+
+    def cond(self):
+        pass
+
+    def literal(self):
+        pass
+
+    def atom(self):
+        if self.lexer.lookup().type == 'str':
+            return ast.Str(self.lexer.next().value)
+        elif self.lexer.lookup().type in {'int', 'float'}:
+            return ast.Num(self.lexer.next().value)
+        else:
+            raise RuntimeError('expected atom')
+
+    def attr(self):
+        if self.lexer.lookup().type == 'id':
+            node = ast.Subscript(
+                ast.Name(self.context),
+                ast.Index(ast.Name(self.lexer.next().value)))
+            while self.lexer.lookup().type in {'dot', 'lsquare'}:
+                if self.lexer.lookup().type == 'dot':
+                    self.lexer.next()
+                    token = self.lexer.consume('id')
+                    node = ast.Call(
+                        ast.Name(self.getattr),
+                        [ast.Name(self.context), ast.Str(token.value)], [])
+                elif self.lexer.lookup().type == 'lsquare':
+                    self.lexer.next()
+                    node = AttrNode(node, self.parse_attr(self.lexer))
+                    node = ast.Call(
+                        ast.Name(self.getattr),
+                        [node, self.attr()], [])
+                    self.lexer.consume('rsquare')
+            return node
+        return self.atom()
+
+    def pipe(self):
+        return self.attr()
+
+    def expr(self, convert_to_str=False):
+        return self.pipe()
+
+    def nodelist(self, until=None):
+        children = []
+        while True:
+            token = self.lexer.next()
+            if token.type == 'eof':
+                break
+            elif token.type == 'raw':
+                children.append(ast.Expr(ast.Yield(ast.Str(token.value))))
+            elif token.type == 'ldelim':
+                if self.lexer.lookup().type == 'keyword':
+                    if self.lexer.lookup().value not in Template.keywords:
+                        if until and self.lexer.lookup().value in until:
+                            return children
+                        raise TemplateSyntaxError(
+                            'unknown keyword: {}'.format(token.value),
+                            source=self.lexer.source, pos=token.pos)
+                    token = self.lexer.next()
+                    kw_class = Template.keywords[token.value]
+                    # todo: change
+                    children.append(kw_class().parse(self.lexer))
+                else:
+                    escaped = ast.Call(
+                        ast.Name(self.tostr, ast.Load()), [self.expr()], [])
+                    children.append(ast.Expr(ast.Yield(escaped)))
+                    self.lexer.consume('rdelim')
+            else:
+                raise TemplateSyntaxError(
+                    'unexpected token: {}'.format(token.type),
+                    source=self.lexer.source, pos=token.pos)
+        return children
+
+    def compile(self, raw=False):
+        funcname = 'root'
+
+        tmpl = self.nodelist()
+        tmpl_wrapper = ast.FunctionDef(
+            self.funcname,
+            ast.arguments(
+                args=[
+                    ast.arg(self.context, annotation=None),
+                    ast.arg(self.tostr, annotation=None)],
+                kwonlyargs=[], kw_defaults=[], defaults=[],
+                vararg=None, kwarg=None),
+            tmpl,
+            decorator_list=[])
+        tmpl_module = ast.Module([tmpl_wrapper])
+
+        ast.fix_missing_locations(tmpl_module)
+
+        if raw:
+            return tmpl_module
+
+        code = compile(tmpl_module, self.filename, mode='exec', optimize=2)
+        code_env = {}
+        exec(code, code_env)
+        return code_env[self.funcname]
+
+
 class Template:
     keywords = {
         'if': IfNode,
@@ -469,11 +586,16 @@ class Template:
     def __init__(self, source, loader=None):
         self.loader = loader
         self.source = source
-        self.root = Document()
-        self.root.parse(Lexer(self.source))
+        self.code = Compiler(Lexer(self.source)).compile()
+
+    @property
+    def compiled(self):
+        import astor
+        code_ast = Compiler(Lexer(self.source)).compile(raw=True)
+        return astor.to_source(code_ast)
 
     def render(self, **context):
-        return self.root.render(Context(context, loader=self.loader))
+        return ''.join(self.code(Context(context, loader=self.loader), lambda x: str(x)))
 
 
 class Loader:
