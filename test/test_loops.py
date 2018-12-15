@@ -7,10 +7,10 @@ def reverse(items):
 
 
 def test_simple():
-    t = Template('{{ #for a : b }}{{ a }}{{ #endfor }}')
+    t = Template('{{ for a in b }}{{ a }}{{ end }}')
     assert t.render(b=['foo', 'bar']) == 'foobar'
 
 
 def test_loop_filters():
-    t = Template('{{ #for a : b|reverse }}{{ a }}{{ #endfor }}')
+    t = Template('{{ for a in b | reverse }}{{ a }}{{ end }}')
     assert t.render(b=['foo', 'bar']) == 'barfoo'

@@ -69,11 +69,12 @@ def test_ids():
 
 
 def test_keywords():
-    lexer = Lexer(r'{{ #for #endfor }}')
+    lexer = Lexer(r'{{ for end if }}')
     tokens = [
         Token('ldelim', '{{', 0),
-        Token('keyword', '#for', 3),
-        Token('keyword', '#endfor', 8),
-        Token('rdelim', '}}', 16),
+        Token('keyword', 'for', 3),
+        Token('keyword', 'end', 7),
+        Token('keyword', 'if', 11),
+        Token('rdelim', '}}', 14),
     ]
     assert tokens == lexer.tokens

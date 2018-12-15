@@ -44,11 +44,16 @@ class Lexer:
         self.tokens = list(self.tokenize())
         self.idx = 0
 
-    def consume(self, token_type):
+    def consume(self, token_type, token_value=None):
         token = self.next()
         if token.type != token_type:
             raise TemplateSyntaxError(
                 'expected {}, got {}'.format(token_type, token.type),
+                source=self.source,
+                pos=token.pos)
+        if token_value and token.value != token_value:
+            raise TemplateSyntaxError(
+                'expected {}, got {}'.format(token_value, token.value),
                 source=self.source,
                 pos=token.pos)
         return token
@@ -79,7 +84,7 @@ class Lexer:
                 (c(r'\s+'), 'ws'),
 
                 # keyword
-                (c(r'#[a-z]+'), 'keyword'),
+                (c(r'\b(if|else|elif|for|in|end|set)\b'), 'keyword'),
 
                 (c(r':'), 'colon'),
                 (c(r'\.'), 'dot'),
@@ -361,20 +366,20 @@ class IfNode(Node):
         lexer.consume('rdelim')
         while True:
             body = NodeList().parse(
-                lexer, until=['#elseif', '#else', '#endif'])
+                lexer, until=['elif', 'else', 'end'])
             self.blocks.append([condition, body])
             token = lexer.next()
-            if token.value == '#elseif':
+            if token.value == 'elif':
                 condition = ExpressionNode('conditional').parse(lexer)
                 lexer.consume('rdelim')
                 continue
-            elif token.value == '#else':
+            elif token.value == 'else':
                 lexer.consume('rdelim')
-                body = NodeList().parse(lexer, until=['#endif'])
+                body = NodeList().parse(lexer, until=['end'])
                 self.blocks.append([None, body])
                 lexer.consume('keyword')
                 lexer.consume('rdelim')
-            elif token.value == '#endif':
+            elif token.value == 'end':
                 lexer.consume('rdelim')
             break
         return self
@@ -396,10 +401,10 @@ class ForNode(Node):
 
     def parse(self, lexer):
         self.target = lexer.consume('id').value
-        lexer.consume('colon')
+        lexer.consume('keyword', 'in')
         self.iter = ExpressionNode().parse(lexer)
         lexer.consume('rdelim')
-        self.body = NodeList().parse(lexer, until=['#endfor'])
+        self.body = NodeList().parse(lexer, until=['end'])
         lexer.next()
         lexer.consume('rdelim')
         return self
@@ -431,9 +436,10 @@ class Document(NodeList):
 
 
 class Context:
-    def __init__(self, values, parent=None):
+    def __init__(self, values, parent=None, loader=None):
         self.parent = parent
         self.values = values
+        self.loader = loader
 
     def resolve(self, varname):
         if varname in self.values:
@@ -443,20 +449,44 @@ class Context:
         raise RuntimeError('unresolved variable: {}'.format(varname))
 
 
+class IncludeNode(Node):
+    def parse(self, lexer):
+        self.path = lexer.consume('str').value
+        lexer.consume('rdelim')
+
+    def render(self, context):
+        pass
+
+
 class Template:
     keywords = {
-        '#if': IfNode,
-        '#for': ForNode,
-        '#assign': AssignNode,
+        'if': IfNode,
+        'for': ForNode,
+        'set': AssignNode,
+        'use': IncludeNode,
     }
 
-    def __init__(self, source):
+    def __init__(self, source, loader=None):
+        self.loader = loader
         self.source = source
         self.root = Document()
         self.root.parse(Lexer(self.source))
 
     def render(self, **context):
-        return self.root.render(Context(context))
+        return self.root.render(Context(context, loader=self.loader))
+
+
+class Loader:
+    def __init__(self):
+        self.cache = {}
+
+    def get(self, path):
+        source = self.get_contents(path)
+        return Template(source, loader=self)
+
+    def get_contents(self, path):
+        with open(path) as f:
+            return f.read()
 
 
 def render(source, context):
