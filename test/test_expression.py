@@ -31,8 +31,8 @@ def test_pipe():
 
 
 def test_filter_params():
-    assert expr('{{ 1 | test: "2", "3" }}') == '123'
-    assert expr('{{ 100000 | add: 500 }}') == '100500'
+    assert expr('{{ 1 | test("2", "3") }}') == '123'
+    assert expr('{{ 100000 | add(500) }}') == '100500'
 
 
 def test_attr():

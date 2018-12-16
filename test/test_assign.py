@@ -1,7 +1,7 @@
 from misai import Template
 
 
-def test_assign():
+def test_assign_simple():
     t = Template('{{ set x = "foo" }}{{ x }}')
     assert t.render() == 'foo'
 

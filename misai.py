@@ -413,7 +413,6 @@ class ForNode(Node):
     def render(self, context):
         result = []
         for item in self.iter.eval(context):
-            print('x', item)
             subctx = Context({self.target: item}, context)
             result.append(self.body.render(subctx))
         return ''.join([str(r) for r in result])
@@ -445,7 +444,7 @@ class Context:
         self.scopes[-1][key] = value
 
     def __getitem__(self, key):
-        for i in range(len(self.scopes), -1, -1):
+        for i in range(len(self.scopes) - 1, -1, -1):
             if key in self.scopes[i]:
                 return self.scopes[i][key]
         raise IndexError
@@ -478,9 +477,21 @@ class Compiler:
         self.getattr = 'getattr'
         self.context = 'context'
         self.tostr = 'tostr'
+        self.filters = 'filters'
+        self.keyword_handlers = {
+            'set': self.assign,
+        }
 
     def assign(self):
-        pass
+        var = self.lexer.consume('id').value
+        self.lexer.consume('assign')
+        node = ast.Assign(
+            [ast.Subscript(ast.Name('context', ast.Load()),
+             ast.Index(ast.Str(var)),
+             ast.Store())],
+            self.expr())
+        self.lexer.consume('rdelim')
+        return node
 
     def loop(self):
         pass
@@ -502,17 +513,18 @@ class Compiler:
     def attr(self):
         if self.lexer.lookup().type == 'id':
             node = ast.Subscript(
-                ast.Name(self.context),
-                ast.Index(ast.Name(self.lexer.next().value)))
+                ast.Name(self.context, ast.Load()),
+                ast.Index(ast.Str(self.lexer.next().value)),
+                ast.Load())
             while self.lexer.lookup().type in {'dot', 'lsquare'}:
-                if self.lexer.lookup().type == 'dot':
-                    self.lexer.next()
+                x = self.lexer.next()
+                if x.type == 'dot':
                     token = self.lexer.consume('id')
                     node = ast.Call(
-                        ast.Name(self.getattr),
-                        [ast.Name(self.context), ast.Str(token.value)], [])
-                elif self.lexer.lookup().type == 'lsquare':
-                    self.lexer.next()
+                        ast.Name(self.getattr, ast.Load()),
+                        [ast.Name(self.context, ast.Load()),
+                         ast.Str(token.value)], [])
+                elif x.type == 'lsquare':
                     node = AttrNode(node, self.parse_attr(self.lexer))
                     node = ast.Call(
                         ast.Name(self.getattr),
@@ -522,7 +534,19 @@ class Compiler:
         return self.atom()
 
     def pipe(self):
-        return self.attr()
+        node = self.attr()
+        while self.lexer.lookup().type == 'pipe':
+            self.lexer.next()
+            filter_name = self.lexer.consume('id').value
+            # TODO: callable filters
+            node = ast.Call(
+                ast.Subscript(
+                    ast.Name(self.filters, ast.Load()),
+                    ast.Index(ast.Str(filter_name)),
+                    ast.Load()),
+                args=[node],
+                keywords=[])
+        return node
 
     def expr(self, convert_to_str=False):
         return self.pipe()
@@ -537,16 +561,14 @@ class Compiler:
                 children.append(ast.Expr(ast.Yield(ast.Str(token.value))))
             elif token.type == 'ldelim':
                 if self.lexer.lookup().type == 'keyword':
-                    if self.lexer.lookup().value not in Template.keywords:
+                    if self.lexer.lookup().value not in self.keyword_handlers:
                         if until and self.lexer.lookup().value in until:
                             return children
                         raise TemplateSyntaxError(
                             'unknown keyword: {}'.format(token.value),
                             source=self.lexer.source, pos=token.pos)
                     token = self.lexer.next()
-                    kw_class = Template.keywords[token.value]
-                    # todo: change
-                    children.append(kw_class().parse(self.lexer))
+                    children.append(self.keyword_handlers[token.value]())
                 else:
                     escaped = ast.Call(
                         ast.Name(self.tostr, ast.Load()), [self.expr()], [])
@@ -567,7 +589,8 @@ class Compiler:
             ast.arguments(
                 args=[
                     ast.arg(self.context, annotation=None),
-                    ast.arg(self.tostr, annotation=None)],
+                    ast.arg(self.tostr, annotation=None),
+                    ast.arg(self.filters, annotation=None)],
                 kwonlyargs=[], kw_defaults=[], defaults=[],
                 vararg=None, kwarg=None),
             tmpl,
@@ -605,7 +628,10 @@ class Template:
         return astor.to_source(code_ast)
 
     def render(self, **context):
-        return ''.join(self.code(Context(context, loader=self.loader), lambda x: str(x)))
+        return ''.join(self.code(
+            Context(context, loader=self.loader),
+            lambda x: str(x),
+            filter))
 
 
 class Loader:
