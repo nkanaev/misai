@@ -437,17 +437,27 @@ class Document(NodeList):
 
 
 class Context:
-    def __init__(self, values, parent=None, loader=None):
-        self.parent = parent
-        self.values = values
+    def __init__(self, values, loader=None):
+        self.scopes = [values]
         self.loader = loader
 
-    def resolve(self, varname):
-        if varname in self.values:
-            return self.values[varname]
-        if self.parent:
-            return self.parent.resolve(varname)
-        raise RuntimeError('unresolved variable: {}'.format(varname))
+    def __setitem__(self, key, value):
+        self.scopes[-1][key] = value
+
+    def __getitem__(self, key):
+        for i in range(len(self.scopes), -1, -1):
+            if key in self.scopes[i]:
+                return self.scopes[i][key]
+        raise IndexError
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.scopes.pop()
+
+    def __call__(self, values):
+        self.scopes.append(values)
 
 
 class IncludeNode(Node):
