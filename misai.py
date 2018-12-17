@@ -8,7 +8,6 @@ Token = collections.namedtuple('Token', ['type', 'value', 'pos'])
 
 
 class Filters(dict):
-
     def __call__(self, func=None, **params):
         if callable(func):
             self[func.__name__] = func
@@ -19,6 +18,17 @@ class Filters(dict):
 
 
 filter = Filters()
+
+
+def attrgetter(obj, key):
+    try:
+        return obj[key]
+    except (TypeError, LookupError, AttributeError):
+        pass
+    try:
+        return getattr(obj, key)
+    except AttributeError:
+        pass
 
 
 @filter
@@ -474,13 +484,19 @@ class Compiler:
         self.filename = filename
         self.funcname = 'root'
         # todo: getattr
-        self.getattr = 'getattr'
+        self.getattr = 'attrgetter'
         self.context = 'context'
         self.tostr = 'tostr'
         self.filters = 'filters'
         self.keyword_handlers = {
-            'set': self.assign,
-        }
+            'set': self.assign,}
+        self.comp_map = {
+            '==': ast.Eq,
+            '!=': ast.NotEq,
+            '<=': ast.LtE,
+            '>=': ast.GtE,
+            '<': ast.Lt,
+            '>': ast.Gt,}
 
     def assign(self):
         var = self.lexer.consume('id').value
@@ -522,12 +538,10 @@ class Compiler:
                     token = self.lexer.consume('id')
                     node = ast.Call(
                         ast.Name(self.getattr, ast.Load()),
-                        [ast.Name(self.context, ast.Load()),
-                         ast.Str(token.value)], [])
+                        [node, ast.Str(token.value)], [])
                 elif x.type == 'lsquare':
-                    node = AttrNode(node, self.parse_attr(self.lexer))
                     node = ast.Call(
-                        ast.Name(self.getattr),
+                        ast.Name(self.getattr, ast.Load()),
                         [node, self.attr()], [])
                     self.lexer.consume('rsquare')
             return node
@@ -548,8 +562,33 @@ class Compiler:
                 keywords=[])
         return node
 
-    def expr(self, convert_to_str=False):
-        return self.pipe()
+    def comp(self):
+        # TODO: pipe > comp?
+        node = self.pipe()
+        # TODO: check properly
+        while self.lexer.lookup().type == 'comp':
+            op = self.lexer.consume('comp').value
+            node = ast.Compare(node, self.comp_map[op](), self.pipe())
+        return node
+
+    def and_(self):
+        node = self.comp()
+        # TODO: check properly
+        while self.lexer.lookup().value == 'and':
+            self.lexer.consume('logic')
+            node = ast.BoolOp(ast.And(), [node, self.and_()])
+        return node
+
+    def or_(self):
+        node = self.and_()
+        # TODO: check properly
+        while self.lexer.lookup().value == 'or':
+            self.lexer.consume('logic')
+            node = ast.BoolOp(ast.Or(), [node, self.and_()])
+        return node
+
+    def expr(self):
+        return self.or_()
 
     def nodelist(self, until=None):
         children = []
@@ -590,7 +629,8 @@ class Compiler:
                 args=[
                     ast.arg(self.context, annotation=None),
                     ast.arg(self.tostr, annotation=None),
-                    ast.arg(self.filters, annotation=None)],
+                    ast.arg(self.filters, annotation=None),
+                    ast.arg(self.getattr, annotation=None)],
                 kwonlyargs=[], kw_defaults=[], defaults=[],
                 vararg=None, kwarg=None),
             tmpl,
@@ -631,7 +671,8 @@ class Template:
         return ''.join(self.code(
             Context(context, loader=self.loader),
             lambda x: str(x),
-            filter))
+            filter,
+            attrgetter))
 
 
 class Loader:
@@ -647,5 +688,7 @@ class Loader:
             return f.read()
 
 
-def render(source, context):
+def render(source, context=None):
+    context = context or {}
+    print('>>', Template(source).compiled)
     return Template(source).render(**context)
