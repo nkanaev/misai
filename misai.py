@@ -547,18 +547,28 @@ class Compiler:
             return node
         return self.atom()
 
+    def params(self):
+        p = []
+        if self.lexer.lookup().type == 'colon':
+            self.lexer.next()
+            p.append(self.expr())
+            while self.lexer.lookup().type == 'comma':
+                self.lexer.next()
+                p.append(self.expr())
+        return p
+
     def pipe(self):
         node = self.attr()
         while self.lexer.lookup().type == 'pipe':
             self.lexer.next()
             filter_name = self.lexer.consume('id').value
-            # TODO: callable filters
+            params = self.params()
             node = ast.Call(
                 ast.Subscript(
                     ast.Name(self.filters, ast.Load()),
                     ast.Index(ast.Str(filter_name)),
                     ast.Load()),
-                args=[node],
+                args=[node] + params,
                 keywords=[])
         return node
 

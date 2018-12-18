@@ -23,8 +23,8 @@ def test_pipe():
 
 
 def test_filter_params():
-    assert render('{{ 1 | test("2", "3") }}') == '123'
-    assert render('{{ 100000 | add(500) }}') == '100500'
+    assert render('{{ 1 | test: "2", "3" }}') == '123'
+    assert render('{{ 100000 | add: 500 }}') == '100500'
 
 
 def test_attr():
