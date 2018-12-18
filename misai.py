@@ -563,7 +563,6 @@ class Compiler:
         return node
 
     def comp(self):
-        # TODO: pipe > comp?
         node = self.pipe()
         # TODO: check properly
         while self.lexer.lookup().type == 'comp':

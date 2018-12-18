@@ -33,3 +33,7 @@ def test_attr():
 
     assert render('{{ foo["bar"] }}', {'foo': {'bar': 'baz'}}) == 'baz'
     assert render('{{ foo["bar"][1] }}', {'foo': {'bar': [1, 2, 3]}}) == '2'
+
+
+def test_precedence():
+    assert render('{{ foo.bar | capitalize }}', {'foo': {'bar': 'baz'}}) == 'Baz'
