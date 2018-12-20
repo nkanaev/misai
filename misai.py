@@ -570,10 +570,10 @@ class Compiler:
         p = []
         if self.lexer.lookup().type == 'colon':
             self.lexer.next()
-            p.append(self.expr())
+            p.append(self.attr())
             while self.lexer.lookup().type == 'comma':
                 self.lexer.next()
-                p.append(self.expr())
+                p.append(self.attr())
         return p
 
     def pipe(self):
