@@ -489,7 +489,8 @@ class Compiler:
         self.tostr = 'tostr'
         self.filters = 'filters'
         self.keyword_handlers = {
-            'set': self.assign,}
+            'set': self.assign,
+            'if': self.if_}
         self.comp_map = {
             '==': ast.Eq,
             '!=': ast.NotEq,
@@ -512,11 +513,29 @@ class Compiler:
     def loop(self):
         pass
 
-    def cond(self):
-        pass
-
-    def literal(self):
-        pass
+    def if_(self):
+        cond = self.expr()
+        root = node = ast.If(cond)
+        self.lexer.consume('rdelim')
+        while True:
+            node.body = self.nodelist(until=['elif', 'else', 'end'])
+            next = self.lexer.next()
+            if next.value == 'elif':
+                orelse = ast.If(self.expr())
+                node.orelse = [orelse]
+                node = orelse
+                self.lexer.consume('rdelim')
+                continue
+            elif next.value == 'else':
+                self.lexer.consume('rdelim')
+                node.orelse = self.nodelist(until='end')
+                self.lexer.consume('keyword', 'end')
+                self.lexer.consume('rdelim')
+            elif next.value == 'end':
+                node.orelse = []
+                self.lexer.consume('rdelim')
+            break
+        return root
 
     def atom(self):
         if self.lexer.lookup().type == 'str':
@@ -577,7 +596,7 @@ class Compiler:
         # TODO: check properly
         while self.lexer.lookup().type == 'comp':
             op = self.lexer.consume('comp').value
-            node = ast.Compare(node, self.comp_map[op](), self.pipe())
+            node = ast.Compare(node, [self.comp_map[op]()], [self.pipe()])
         return node
 
     def and_(self):
