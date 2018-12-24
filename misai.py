@@ -20,7 +20,7 @@ class Filters(dict):
 filter = Filters()
 
 
-def attrgetter(obj, key):
+def attr(obj, key):
     try:
         return obj[key]
     except (TypeError, LookupError, AttributeError):
@@ -467,6 +467,7 @@ class Context:
 
     def __call__(self, values):
         self.scopes.append(values)
+        return self
 
 
 class IncludeNode(Node):
@@ -488,9 +489,11 @@ class Compiler:
         self.context = 'context'
         self.tostr = 'tostr'
         self.filters = 'filters'
+        self.varcount = -1
         self.keyword_handlers = {
             'set': self.assign,
-            'if': self.if_}
+            'if': self.cond,
+            'for': self.loop}
         self.comp_map = {
             '==': ast.Eq,
             '!=': ast.NotEq,
@@ -498,6 +501,10 @@ class Compiler:
             '>=': ast.GtE,
             '<': ast.Lt,
             '>': ast.Gt,}
+
+    def _unique_name(self):
+        self.varcount += 1
+        return 'var' + str(self.varcount)
 
     def assign(self):
         var = self.lexer.consume('id').value
@@ -511,9 +518,22 @@ class Compiler:
         return node
 
     def loop(self):
-        pass
+        target = self.lexer.consume('id').value
+        self.lexer.consume('keyword', 'in')
+        iter = self.expr()
+        self.lexer.consume('rdelim')
+        body = self.nodelist(until=['end'])
+        self.lexer.consume('keyword', 'end')
+        self.lexer.consume('rdelim')
 
-    def if_(self):
+        varname = self._unique_name()
+        stmt_ctx_call = ast.Call(
+            ast.Name(self.context, ast.Load()),
+            [ast.Dict([ast.Str(target)], [ast.Name(varname, ast.Load())])], [])
+        stmt_with = ast.With([ast.withitem(stmt_ctx_call, None)], body)
+        return ast.For(ast.Name(varname, ast.Store()), iter, [stmt_with], [])
+
+    def cond(self):
         cond = self.expr()
         root = node = ast.If(cond)
         self.lexer.consume('rdelim')
@@ -700,7 +720,7 @@ class Template:
             Context(context, loader=self.loader),
             lambda x: str(x),
             filter,
-            attrgetter))
+            attr))
 
 
 class Loader:
