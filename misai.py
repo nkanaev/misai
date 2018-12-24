@@ -412,26 +412,19 @@ class Compiler:
 
 
 class Template:
-    keywords = {
-        'if': IfNode,
-        'for': ForNode,
-        'set': AssignNode,
-        'use': IncludeNode,
-    }
-
-    def __init__(self, source, loader=None):
+    def __init__(self, content, loader=None):
         self.loader = loader
-        self.source = source
-        self.code = Compiler(Lexer(self.source)).compile()
+        self.content = content
+        self.func = Compiler(Lexer(self.content)).compile()
 
     @property
-    def compiled(self):
+    def code(self):
         import astor
         code_ast = Compiler(Lexer(self.source)).compile(raw=True)
         return astor.to_source(code_ast)
 
     def render(self, **context):
-        return ''.join(self.code(
+        return ''.join(self.func(
             Context(context, loader=self.loader),
             lambda x: str(x),
             filter,
@@ -453,5 +446,4 @@ class Loader:
 
 def render(source, context=None):
     context = context or {}
-    print('>>', Template(source).compiled)
     return Template(source).render(**context)
