@@ -207,12 +207,13 @@ class Compiler:
         self.lexer = lexer
         self.filename = filename
         self.funcname = 'root'
-        # todo: getattr
+        self.varcount = -1
+
         self.param_getattr = 'attrgetter'
         self.param_context = 'context'
         self.param_tostr = 'tostr'
         self.param_filters = 'filters'
-        self.varcount = -1
+
         self.keyword_handlers = {
             'set': self.assign,
             'if': self.cond,
@@ -385,8 +386,6 @@ class Compiler:
         return children
 
     def compile(self, raw=False):
-        funcname = 'root'
-
         tmpl = self.nodelist()
         tmpl_wrapper = ast.FunctionDef(
             name=self.funcname,
