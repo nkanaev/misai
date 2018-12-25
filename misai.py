@@ -7,6 +7,14 @@ import collections
 Token = collections.namedtuple('Token', ['type', 'value', 'pos'])
 
 
+class astutils:
+    @staticmethod
+    def Call(func, *args):
+        return ast.Call(
+            func=ast.Name(id=func, ctx=ast.Load()),
+            args=list(args), keywords=[])
+
+
 class Filters(dict):
     def __call__(self, func=None, **params):
         if callable(func):
@@ -200,10 +208,10 @@ class Compiler:
         self.filename = filename
         self.funcname = 'root'
         # todo: getattr
-        self.getattr = 'attrgetter'
-        self.context = 'context'
-        self.tostr = 'tostr'
-        self.filters = 'filters'
+        self.param_getattr = 'attrgetter'
+        self.param_context = 'context'
+        self.param_tostr = 'tostr'
+        self.param_filters = 'filters'
         self.varcount = -1
         self.keyword_handlers = {
             'set': self.assign,
@@ -242,21 +250,21 @@ class Compiler:
         self.lexer.consume('rdelim')
 
         varname = self._unique_name()
-        stmt_ctx_call = ast.Call(
-            ast.Name(self.context, ast.Load()),
-            [ast.Dict([ast.Str(target)], [ast.Name(varname, ast.Load())])], [])
+        stmt_ctx_call = astutils.Call(
+            self.param_context,
+            ast.Dict([ast.Str(target)], [ast.Name(varname, ast.Load())]))
         stmt_with = ast.With([ast.withitem(stmt_ctx_call, None)], body)
         return ast.For(ast.Name(varname, ast.Store()), iter, [stmt_with], [])
 
     def cond(self):
         cond = self.expr()
-        root = node = ast.If(cond)
+        root = node = ast.If(test=cond, body=[], orelse=[])
         self.lexer.consume('rdelim')
         while True:
             node.body = self.nodelist(until=['elif', 'else', 'end'])
             next = self.lexer.next()
             if next.value == 'elif':
-                orelse = ast.If(self.expr())
+                orelse = ast.If(test=self.expr(), body=[], orelse=[])
                 node.orelse = [orelse]
                 node = orelse
                 self.lexer.consume('rdelim')
@@ -283,20 +291,16 @@ class Compiler:
     def attr(self):
         if self.lexer.lookup().type == 'id':
             node = ast.Subscript(
-                ast.Name(self.context, ast.Load()),
+                ast.Name(self.param_context, ast.Load()),
                 ast.Index(ast.Str(self.lexer.next().value)),
                 ast.Load())
             while self.lexer.lookup().type in {'dot', 'lsquare'}:
                 x = self.lexer.next()
                 if x.type == 'dot':
                     token = self.lexer.consume('id')
-                    node = ast.Call(
-                        ast.Name(self.getattr, ast.Load()),
-                        [node, ast.Str(token.value)], [])
+                    node = astutils.Call(self.param_getattr, node, ast.Str(token.value))
                 elif x.type == 'lsquare':
-                    node = ast.Call(
-                        ast.Name(self.getattr, ast.Load()),
-                        [node, self.attr()], [])
+                    node = astutils.Call(self.param_getattr, node, self.attr())
                     self.lexer.consume('rsquare')
             return node
         return self.atom()
@@ -318,12 +322,11 @@ class Compiler:
             filter_name = self.lexer.consume('id').value
             params = self.params()
             node = ast.Call(
-                ast.Subscript(
-                    ast.Name(self.filters, ast.Load()),
+                func=ast.Subscript(
+                    ast.Name(self.param_filters, ast.Load()),
                     ast.Index(ast.Str(filter_name)),
                     ast.Load()),
-                args=[node] + params,
-                keywords=[])
+                args=[node] + params, keywords=[])
         return node
 
     def comp(self):
@@ -372,8 +375,7 @@ class Compiler:
                     token = self.lexer.next()
                     children.append(self.keyword_handlers[token.value]())
                 else:
-                    escaped = ast.Call(
-                        ast.Name(self.tostr, ast.Load()), [self.expr()], [])
+                    escaped = astutils.Call(self.param_tostr, self.expr())
                     children.append(ast.Expr(ast.Yield(escaped)))
                     self.lexer.consume('rdelim')
             else:
@@ -387,16 +389,16 @@ class Compiler:
 
         tmpl = self.nodelist()
         tmpl_wrapper = ast.FunctionDef(
-            self.funcname,
-            ast.arguments(
+            name=self.funcname,
+            args=ast.arguments(
                 args=[
-                    ast.arg(self.context, annotation=None),
-                    ast.arg(self.tostr, annotation=None),
-                    ast.arg(self.filters, annotation=None),
-                    ast.arg(self.getattr, annotation=None)],
+                    ast.arg(arg=self.param_context, annotation=None),
+                    ast.arg(arg=self.param_tostr, annotation=None),
+                    ast.arg(arg=self.param_filters, annotation=None),
+                    ast.arg(arg=self.param_getattr, annotation=None)],
                 kwonlyargs=[], kw_defaults=[], defaults=[],
                 vararg=None, kwarg=None),
-            tmpl,
+            body=tmpl,
             decorator_list=[])
         tmpl_module = ast.Module([tmpl_wrapper])
 
