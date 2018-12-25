@@ -11,8 +11,8 @@ example
     {{ #if logged_in }}
         {{ #for user : users }}
             {{ user.name }}
-        {{ #endfor }}
-    {{ #endif }}
+        {{ #end }}
+    {{ #end }}
 
 
 tests

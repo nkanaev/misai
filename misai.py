@@ -103,7 +103,7 @@ class Lexer:
                 (c(r'\s+'), 'ws'),
 
                 # keyword
-                (c(r'\b(if|else|elif|for|in|end|set)\b'), 'keyword'),
+                (c(r'#(\w+)'), 'keyword'),
 
                 (c(r':'), 'colon'),
                 (c(r'\.'), 'dot'),
@@ -243,7 +243,7 @@ class Compiler:
 
     def loop(self):
         target = self.lexer.consume('id').value
-        self.lexer.consume('keyword', 'in')
+        self.lexer.consume('colon')
         iter = self.expr()
         self.lexer.consume('rdelim')
         body = self.nodelist(until=['end'])
@@ -367,11 +367,12 @@ class Compiler:
                 children.append(ast.Expr(ast.Yield(ast.Str(token.value))))
             elif token.type == 'ldelim':
                 if self.lexer.lookup().type == 'keyword':
-                    if self.lexer.lookup().value not in self.keyword_handlers:
-                        if until and self.lexer.lookup().value in until:
+                    next = self.lexer.lookup()
+                    if next.value not in self.keyword_handlers:
+                        if until and next.value in until:
                             return children
                         raise TemplateSyntaxError(
-                            'unknown keyword: {}'.format(token.value),
+                            'unknown keyword: {}'.format(next.value),
                             source=self.lexer.source, pos=token.pos)
                     token = self.lexer.next()
                     children.append(self.keyword_handlers[token.value]())
