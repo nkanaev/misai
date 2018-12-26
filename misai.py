@@ -1,4 +1,5 @@
 import ast
+import sys
 import re
 import operator
 import collections
@@ -13,6 +14,27 @@ class astutils:
         return ast.Call(
             func=ast.Name(id=func, ctx=ast.Load()),
             args=list(args), keywords=[])
+
+    @staticmethod
+    def With(expr, body):
+        if sys.version_info[0] == 2:
+            return ast.With(context_expr=expr, optional_vars=None, body=body)
+        return ast.With(items=[ast.withitem(context_expr=expr, optional_vars=None)], body=body)
+
+    @staticmethod
+    def FunctionDef(name, args, body):
+        if sys.version_info[0] == 2:
+            args = [ast.Name(id=arg, ctx=ast.Param()) for arg in args]
+        else:
+            args = [ast.arg(arg=arg, annotation=None) for arg in args]
+        return ast.FunctionDef(
+            name=name,
+            args=ast.arguments(
+                args=args,
+                kwonlyargs=[], kw_defaults=[], defaults=[],
+                vararg=None, kwarg=None),
+            body=body,
+            decorator_list=[])
 
 
 class Filters(dict):
@@ -254,7 +276,7 @@ class Compiler:
         stmt_ctx_call = astutils.Call(
             self.param_context,
             ast.Dict([ast.Str(target)], [ast.Name(varname, ast.Load())]))
-        stmt_with = ast.With([ast.withitem(stmt_ctx_call, None)], body)
+        stmt_with = astutils.With(stmt_ctx_call, body)
         return ast.For(ast.Name(varname, ast.Store()), iter, [stmt_with], [])
 
     def cond(self):
@@ -388,18 +410,10 @@ class Compiler:
 
     def compile(self, raw=False):
         tmpl = self.nodelist()
-        tmpl_wrapper = ast.FunctionDef(
+        tmpl_wrapper = astutils.FunctionDef(
             name=self.funcname,
-            args=ast.arguments(
-                args=[
-                    ast.arg(arg=self.param_context, annotation=None),
-                    ast.arg(arg=self.param_tostr, annotation=None),
-                    ast.arg(arg=self.param_filters, annotation=None),
-                    ast.arg(arg=self.param_getattr, annotation=None)],
-                kwonlyargs=[], kw_defaults=[], defaults=[],
-                vararg=None, kwarg=None),
-            body=tmpl,
-            decorator_list=[])
+            args=[self.param_context, self.param_tostr, self.param_filters, self.param_getattr],
+            body=tmpl)
         tmpl_module = ast.Module([tmpl_wrapper])
 
         ast.fix_missing_locations(tmpl_module)
@@ -407,7 +421,8 @@ class Compiler:
         if raw:
             return tmpl_module
 
-        code = compile(tmpl_module, self.filename, mode='exec', optimize=2)
+        print(ast.dump(tmpl_module))
+        code = compile(tmpl_module, self.filename, mode='exec')
         code_env = {}
         exec(code, code_env)
         return code_env[self.funcname]
