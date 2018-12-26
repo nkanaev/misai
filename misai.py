@@ -451,13 +451,6 @@ class Template:
         self.content = content
         self.formatter = formatter or str
         self.func = Compiler(Lexer(self.content)).compile()
-        print(self.code)
-
-    @property
-    def code(self):
-        import astor
-        code_ast = Compiler(Lexer(self.content)).compile(raw=True)
-        return astor.to_source(code_ast)
 
     def render(self, **params):
         ctx = Context(params, loader=self.loader)
