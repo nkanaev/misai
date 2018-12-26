@@ -2,7 +2,7 @@ from misai import render, filter
 
 
 @filter
-def test(a, b, c):
+def concat(a, b, c):
     return str(a) + str(b) + str(c)
 
 
@@ -23,7 +23,7 @@ def test_pipe():
 
 
 def test_filter_params():
-    assert render('{{ 1 | test: "2", "3" }}') == '123'
+    assert render('{{ 1 | concat: "2", "3" }}') == '123'
     assert render('{{ 100000 | add: 500 }}') == '100500'
 
 

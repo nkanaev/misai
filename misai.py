@@ -41,6 +41,7 @@ class Filters(dict):
     def __call__(self, func=None, **params):
         if callable(func):
             self[func.__name__] = func
+            return func
         else:
             def wrapper(func):
                 self[params['name']] = func
@@ -50,6 +51,7 @@ class Filters(dict):
 filter = Filters()
 
 
+@filter
 def attr(obj, key):
     try:
         return obj[key]
@@ -69,6 +71,16 @@ def capitalize(string):
 @filter
 def strip(string):
     return string.strip()
+
+
+@filter
+def htmlescape(input):
+    return str(input)\
+        .replace('&', '&amp;')\
+        .replace('<', '&lt;')\
+        .replace('>', '&gt;')\
+        .replace('"', '&#34;')\
+        .replace("'", '&#39;')
 
 
 class TemplateSyntaxError(Exception):
@@ -231,10 +243,10 @@ class Compiler:
         self.funcname = 'root'
         self.varcount = -1
 
-        self.param_getattr = 'attrgetter'
         self.param_context = 'context'
         self.param_tostr = 'tostr'
         self.param_filters = 'filters'
+        self.param_getattr = 'attr'
 
         self.keyword_handlers = {
             'set': self.assign,
@@ -412,7 +424,12 @@ class Compiler:
         tmpl = self.nodelist()
         tmpl_wrapper = astutils.FunctionDef(
             name=self.funcname,
-            args=[self.param_context, self.param_tostr, self.param_filters, self.param_getattr],
+            args=[
+                self.param_context,
+                self.param_tostr,
+                self.param_filters,
+                self.param_getattr
+            ],
             body=tmpl)
         tmpl_module = ast.Module([tmpl_wrapper])
 
@@ -429,23 +446,22 @@ class Compiler:
 
 
 class Template:
-    def __init__(self, content, loader=None):
+    def __init__(self, content, formatter=None, loader=None):
         self.loader = loader
         self.content = content
+        self.formatter = formatter or str
         self.func = Compiler(Lexer(self.content)).compile()
+        print(self.code)
 
     @property
     def code(self):
         import astor
-        code_ast = Compiler(Lexer(self.source)).compile(raw=True)
+        code_ast = Compiler(Lexer(self.content)).compile(raw=True)
         return astor.to_source(code_ast)
 
-    def render(self, **context):
-        return ''.join(self.func(
-            Context(context, loader=self.loader),
-            lambda x: str(x),
-            filter,
-            attr))
+    def render(self, **params):
+        ctx = Context(params, loader=self.loader)
+        return ''.join(self.func(ctx, self.formatter, filter, attr))
 
 
 class Loader:
