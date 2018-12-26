@@ -111,6 +111,12 @@ class Lexer:
                 pos=token.pos)
         return token
 
+    def next_is(self, token_type, token_value=None):
+        lookup = self.lookup()
+        if token_value:
+            return lookup.type == token_type and lookup.value == token_value
+        return lookup.type == token_type
+
     def lookup(self, offset=0):
         return self.tokens[self.idx]
 
@@ -316,7 +322,7 @@ class Compiler:
         return root
 
     def atom(self):
-        if self.lexer.lookup().type == 'str':
+        if self.lexer.next_is('str'):
             return ast.Str(self.lexer.next().value)
         elif self.lexer.lookup().type in {'int', 'float'}:
             return ast.Num(self.lexer.next().value)
@@ -324,7 +330,7 @@ class Compiler:
             raise RuntimeError('expected atom')
 
     def attr(self):
-        if self.lexer.lookup().type == 'id':
+        if self.lexer.next_is('id'):
             node = ast.Subscript(
                 ast.Name(self.param_context, ast.Load()),
                 ast.Index(ast.Str(self.lexer.next().value)),
@@ -342,17 +348,17 @@ class Compiler:
 
     def params(self):
         p = []
-        if self.lexer.lookup().type == 'colon':
+        if self.lexer.next_is('colon'):
             self.lexer.next()
             p.append(self.attr())
-            while self.lexer.lookup().type == 'comma':
+            while self.lexer.next_is('comma'):
                 self.lexer.next()
                 p.append(self.attr())
         return p
 
     def pipe(self):
         node = self.attr()
-        while self.lexer.lookup().type == 'pipe':
+        while self.lexer.next_is('pipe'):
             self.lexer.next()
             filter_name = self.lexer.consume('id').value
             params = self.params()
@@ -366,24 +372,21 @@ class Compiler:
 
     def comp(self):
         node = self.pipe()
-        # TODO: check properly
-        while self.lexer.lookup().type == 'comp':
+        while self.lexer.next_is('comp'):
             op = self.lexer.consume('comp').value
             node = ast.Compare(node, [self.comp_map[op]()], [self.pipe()])
         return node
 
     def and_(self):
         node = self.comp()
-        # TODO: check properly
-        while self.lexer.lookup().value == 'and':
+        while self.lexer.next_is('logic', 'and'):
             self.lexer.consume('logic')
             node = ast.BoolOp(ast.And(), [node, self.and_()])
         return node
 
     def or_(self):
         node = self.and_()
-        # TODO: check properly
-        while self.lexer.lookup().value == 'or':
+        while self.lexer.next_is('logic', 'or'):
             self.lexer.consume('logic')
             node = ast.BoolOp(ast.Or(), [node, self.and_()])
         return node
@@ -400,7 +403,7 @@ class Compiler:
             elif token.type == 'raw':
                 children.append(ast.Expr(ast.Yield(ast.Str(token.value))))
             elif token.type == 'ldelim':
-                if self.lexer.lookup().type == 'keyword':
+                if self.lexer.next_is('keyword'):
                     next = self.lexer.lookup()
                     if next.value not in self.keyword_handlers:
                         if until and next.value in until:
