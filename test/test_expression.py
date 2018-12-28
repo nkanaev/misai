@@ -37,3 +37,8 @@ def test_attr():
 
 def test_precedence():
     assert render('{{ foo.bar | capitalize }}', {'foo': {'bar': 'baz'}}) == 'Baz'
+
+
+def test_groups():
+    assert render('{{ 0 and  1 or 2  and 3 }}') == '3'
+    assert render('{{ 0 and (1 or 2) and 3 }}') == '0'

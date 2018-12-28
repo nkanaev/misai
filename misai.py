@@ -326,8 +326,16 @@ class Compiler:
             return ast.Str(self.lexer.next().value)
         elif self.lexer.lookup().type in {'int', 'float'}:
             return ast.Num(self.lexer.next().value)
+        elif self.lexer.next_is('lround'):
+            self.lexer.next()
+            node = self.expr()
+            self.lexer.consume('rround')
+            return node
         else:
-            raise RuntimeError('expected atom')
+            token = self.lexer.lookup()
+            raise TemplateSyntaxError(
+                'expected atom, got {}'.format(token.value),
+                source=self.lexer.source, pos=token.pos)
 
     def attr(self):
         if self.lexer.next_is('id'):
@@ -441,7 +449,6 @@ class Compiler:
         if raw:
             return tmpl_module
 
-        print(ast.dump(tmpl_module))
         code = compile(tmpl_module, self.filename, mode='exec')
         code_env = {}
         exec(code, code_env)
