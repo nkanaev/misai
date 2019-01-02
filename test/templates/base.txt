@@ -1,0 +1,1 @@
+{{ #add "./base_add.txt" items="one,two,three"|split:',' end=endword }}

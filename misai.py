@@ -1,8 +1,9 @@
 import ast
-import sys
-import re
-import operator
 import collections
+import operator
+import os
+import re
+import sys
 
 
 Token = collections.namedtuple('Token', ['type', 'value', 'pos'])
@@ -83,11 +84,20 @@ def htmlescape(input):
         .replace("'", '&#39;')
 
 
+@filter
+def split(input, delim=None):
+    return str(input).split(delim)
+
+
 class TemplateSyntaxError(Exception):
     def __init__(self, msg, source=None, pos=None):
         self.msg = msg
         self.source = source
         self.pos = pos
+
+
+class RuntimeError(Exception):
+    pass
 
 
 class Lexer:
@@ -253,11 +263,13 @@ class Compiler:
         self.param_tostr = 'tostr'
         self.param_filters = 'filters'
         self.param_getattr = 'attr'
+        self.param_loader = 'load'
 
         self.keyword_handlers = {
             'set': self.assign,
             'if': self.cond,
-            'for': self.loop}
+            'for': self.loop,
+            'add': self.include}
         self.comp_map = {
             '==': ast.Eq,
             '!=': ast.NotEq,
@@ -269,6 +281,18 @@ class Compiler:
     def _unique_name(self):
         self.varcount += 1
         return 'var' + str(self.varcount)
+
+    def include(self):
+        path = self.lexer.consume('str').value
+        keys, values = [], []
+        while self.lexer.next_is('id'):
+            keys.append(ast.Str(s=self.lexer.consume('id').value))
+            self.lexer.consume('assign')
+            values.append(self.expr())
+        self.lexer.consume('rdelim')
+        call = astutils.Call(
+            self.param_loader, ast.Str(s=path), ast.Dict(keys=keys, values=values))
+        return ast.Expr(ast.Yield(call))
 
     def assign(self):
         var = self.lexer.consume('id').value
@@ -293,7 +317,7 @@ class Compiler:
         varname = self._unique_name()
         stmt_ctx_call = astutils.Call(
             self.param_context,
-            ast.Dict([ast.Str(target)], [ast.Name(varname, ast.Load())]))
+            ast.Dict(keys=[ast.Str(target)], values=[ast.Name(varname, ast.Load())]))
         stmt_with = astutils.With(stmt_ctx_call, body)
         return ast.For(ast.Name(varname, ast.Store()), iter, [stmt_with], [])
 
@@ -439,7 +463,8 @@ class Compiler:
                 self.param_context,
                 self.param_tostr,
                 self.param_filters,
-                self.param_getattr
+                self.param_getattr,
+                self.param_loader,
             ],
             body=tmpl)
         tmpl_module = ast.Module([tmpl_wrapper])
@@ -456,28 +481,33 @@ class Compiler:
 
 
 class Template:
-    def __init__(self, content, formatter=None, loader=None):
+    def __init__(self, content, formatter=None, loader=None, filepath=None):
         self.loader = loader
         self.content = content
         self.formatter = formatter or str
+        self.filepath = filepath
         self.func = Compiler(Lexer(self.content)).compile()
+        self.load = lambda path, params: self.loader.get(path, self).render(**params)
 
     def render(self, **params):
         ctx = Context(params, loader=self.loader)
-        return ''.join(self.func(ctx, self.formatter, filter, attr))
+        return ''.join(self.func(ctx, self.formatter, filter, attr, self.load))
 
 
 class Loader:
-    def __init__(self):
-        self.cache = {}
+    def __init__(self, basedir, params=None):
+        self.basedir = basedir
+        self.params = params or {}
 
-    def get(self, path):
-        source = self.get_contents(path)
-        return Template(source, loader=self)
-
-    def get_contents(self, path):
-        with open(path) as f:
-            return f.read()
+    def get(self, filepath, template=None):
+        if filepath.startswith('./'):
+            filepath = os.path.join(os.path.dirname(template.filepath), filepath[2:])
+        fullpath = os.path.join(self.basedir, filepath)
+        # TODO: check if fullpath is in basedir
+        with open(fullpath) as f:
+            x = f.read()
+            print(filepath, repr(x))
+            return Template(x, loader=self, filepath=filepath, **self.params)
 
 
 def render(source, context=None):

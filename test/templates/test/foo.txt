@@ -1,0 +1,1 @@
+foo{{ #add "bar.txt" }}
