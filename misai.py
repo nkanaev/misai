@@ -101,10 +101,12 @@ class RuntimeError(Exception):
 
 
 class Lexer:
-    def __init__(self, source):
+    def __init__(self, source, clean=True):
         self.source = source
         self.cache = collections.deque()
         self.tokens = list(self.tokenize())
+        if clean:
+            self.clean(self.tokens)
         self.idx = 0
 
     def consume(self, token_type, token_value=None):
@@ -135,6 +137,37 @@ class Lexer:
         if i >= len(self.tokens):
             return Token('eof', None, None)
         return self.tokens[i]
+
+    def clean(self, tokens):
+        il, ir = None, None
+        for i in range(len(tokens)):
+            if tokens[i].type == 'ldelim':
+                il = i
+            elif tokens[i].type == 'rdelim':
+                ir = i
+
+                if not il or tokens[il + 1].type != 'keyword':
+                    il, ir = None, None
+                    continue
+
+                m_l = (il == 0) \
+                    or (tokens[il - 1].type == 'raw'
+                        and re.search('(^|\n|\r\n)[ \t]*$', tokens[il - 1].value))
+                m_r = (ir == len(tokens) - 1) \
+                    or (tokens[ir + 1].type == 'raw'
+                        and re.search('^[ \t]*(\n|\r\n)', tokens[ir + 1].value))
+
+                if m_l and m_r:
+                    if il != 0:
+                        oldtoken = tokens[il - 1]
+                        newvalue = re.sub('[ \t]*$', '', oldtoken.value)
+                        newtoken = Token('raw', newvalue, oldtoken.pos)
+                        tokens[il - 1] = newtoken
+                    if ir != len(tokens) - 1:
+                        oldtoken = tokens[ir + 1]
+                        newvalue = re.sub('^[ \t]*(\n|\r\n)', '', oldtoken.value)
+                        newtoken = Token('raw', newvalue, oldtoken.pos)
+                        tokens[ir + 1] = newtoken
 
     def tokenize(self):
         c = re.compile
