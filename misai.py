@@ -39,13 +39,13 @@ class astutils:
 
 
 class Filters(dict):
-    def __call__(self, func=None, **params):
+    def __call__(self, func):
         if callable(func):
             self[func.__name__] = func
             return func
         else:
-            def wrapper(func):
-                self[params['name']] = func
+            def wrapper(callable):
+                self[func] = callable
             return wrapper
 
 
@@ -514,10 +514,10 @@ class Compiler:
 
 
 class Template:
-    def __init__(self, content, formatter=None, loader=None, filepath=None):
+    def __init__(self, content, loader=None, filepath=None, **options):
         self.loader = loader
         self.content = content
-        self.formatter = formatter or str
+        self.formatter = htmlescape if options.get('autoescape', True) else str
         self.filepath = filepath
         self.func = Compiler(Lexer(self.content)).compile()
         self.load = lambda path, params: self.loader.get(path, self).render(**params)
@@ -528,9 +528,9 @@ class Template:
 
 
 class Loader:
-    def __init__(self, basedir, params=None):
+    def __init__(self, basedir, **params):
         self.basedir = basedir
-        self.params = params or {}
+        self.params = params
 
     def get(self, filepath, template=None):
         if filepath.startswith('./'):
@@ -539,7 +539,6 @@ class Loader:
         # TODO: check if fullpath is in basedir
         with open(fullpath) as f:
             x = f.read()
-            print(filepath, repr(x))
             return Template(x, loader=self, filepath=filepath, **self.params)
 
 
