@@ -261,9 +261,8 @@ class Lexer:
 
 
 class Context:
-    def __init__(self, values, loader=None):
+    def __init__(self, values):
         self.scopes = [values]
-        self.loader = loader
 
     def __setitem__(self, key, value):
         self.scopes[-1][key] = value
@@ -519,11 +518,16 @@ class Template:
         self.content = content
         self.formatter = htmlescape if options.get('autoescape', True) else str
         self.filepath = filepath
+        self.locals = options.get('locals', {})
         self.func = Compiler(Lexer(self.content)).compile()
         self.load = lambda path, params: self.loader.get(path, self).render(**params)
 
     def render(self, **params):
-        ctx = Context(params, loader=self.loader)
+        if self.locals:
+            ctx = Context(self.locals)
+            ctx(params)
+        else:
+            ctx = Context(params)
         return ''.join(self.func(ctx, self.formatter, filter, attr, self.load))
 
 
