@@ -9,6 +9,10 @@ import sys
 Token = collections.namedtuple('Token', ['type', 'value', 'pos'])
 
 
+class noescapestr(str):
+    pass
+
+
 class astutils:
     @staticmethod
     def Call(func, *args):
@@ -76,6 +80,8 @@ def strip(string):
 
 @filter
 def htmlescape(input):
+    if isinstance(input, noescapestr):
+        return input
     return str(input)\
         .replace('&', '&amp;')\
         .replace('<', '&lt;')\
@@ -85,15 +91,23 @@ def htmlescape(input):
 
 
 @filter
+def noescape(input):
+    return noescapestr(input)
+
+
+@filter
 def split(input, delim=None):
     return str(input).split(delim)
 
 
 class TemplateSyntaxError(Exception):
-    def __init__(self, msg, source=None, pos=None):
+    def __init__(self, msg, source, pos):
         self.msg = msg
         self.source = source
         self.pos = pos
+        self.lineno = source.count('\n')
+        self.colno = pos - source.rfind('\n', 0, pos)
+        super().__init__('%s (at line %d, col %d)' % (self.msg, self.lineno, self.colno))
 
 
 class RuntimeError(Exception):
@@ -101,11 +115,11 @@ class RuntimeError(Exception):
 
 
 class Lexer:
-    def __init__(self, source, clean=True):
+    def __init__(self, source, cleanlines=True):
         self.source = source
         self.cache = collections.deque()
         self.tokens = list(self.tokenize())
-        if clean:
+        if cleanlines:
             self.clean(self.tokens)
         self.idx = 0
 
@@ -519,7 +533,7 @@ class Template:
         self.formatter = htmlescape if options.get('autoescape', True) else str
         self.filepath = filepath
         self.locals = options.get('locals', {})
-        self.func = Compiler(Lexer(self.content)).compile()
+        self.func = Compiler(Lexer(self.content, options.get('cleanlines', True))).compile()
         self.load = lambda path, params: self.loader.get(path, self).render(**params)
 
     def render(self, **params):
