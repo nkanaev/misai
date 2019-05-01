@@ -13,7 +13,7 @@ class PyTestCommand(TestCommand):
 
 setup(
     name='misai',
-    version='0.1.0',
+    version='0.1.1',
     description='simple template engine',
     long_description=open('readme.rst').read(),
     url='https://github.com/nkanaev/misai',
@@ -33,6 +33,8 @@ setup(
     author='Nazar Kanaev',
     author_email='nkanaev@live.com',
     py_modules=['misai'],
+    package_data={'': ['readme.rst']},
+    include_package_data=True,
     test_suite='test',
     tests_require=['pytest'],
     cmdclass={"test": PyTestCommand},
