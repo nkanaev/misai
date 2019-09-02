@@ -105,9 +105,10 @@ class TemplateSyntaxError(Exception):
         self.msg = msg
         self.source = source
         self.pos = pos
-        self.lineno = source.count('\n')
+        self.lineno = source[:pos].count('\n') + 1
         self.colno = pos - source.rfind('\n', 0, pos)
-        super().__init__('%s (at line %d, col %d)' % (self.msg, self.lineno, self.colno))
+        super().__init__(
+            '%s (at line %d, col %d)' % (self.msg, self.lineno, self.colno))
 
 
 class RuntimeError(Exception):
@@ -285,7 +286,7 @@ class Context:
         for i in range(len(self.scopes) - 1, -1, -1):
             if key in self.scopes[i]:
                 return self.scopes[i][key]
-        raise IndexError
+        raise IndexError(key)
 
     def __enter__(self):
         return self
