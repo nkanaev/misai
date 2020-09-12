@@ -21,16 +21,11 @@ class astutils:
 
     @staticmethod
     def With(expr, body):
-        if sys.version_info[0] == 2:
-            return ast.With(context_expr=expr, optional_vars=None, body=body)
         return ast.With(items=[ast.withitem(context_expr=expr, optional_vars=None)], body=body)
 
     @staticmethod
     def FunctionDef(name, args, body):
-        if sys.version_info[0] == 2:
-            args = [ast.Name(id=arg, ctx=ast.Param()) for arg in args]
-        else:
-            args = [ast.arg(arg=arg, annotation=None) for arg in args]
+        args = [ast.arg(arg=arg, annotation=None) for arg in args]
 
         if sys.version_info[:3] >= (3, 8, 0):
             args = ast.arguments(
