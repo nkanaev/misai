@@ -1,6 +1,5 @@
 import ast
 import collections
-import operator
 import os
 import re
 import sys
@@ -32,12 +31,21 @@ class astutils:
             args = [ast.Name(id=arg, ctx=ast.Param()) for arg in args]
         else:
             args = [ast.arg(arg=arg, annotation=None) for arg in args]
-        return ast.FunctionDef(
-            name=name,
-            args=ast.arguments(
+
+        if sys.version_info[:3] >= (3, 8, 0):
+            args = ast.arguments(
                 args=args,
                 kwonlyargs=[], kw_defaults=[], defaults=[],
-                vararg=None, kwarg=None),
+                vararg=None, kwarg=None, posonlyargs=[])
+        else:
+            args = ast.arguments(
+                args=args,
+                kwonlyargs=[], kw_defaults=[], defaults=[],
+                vararg=None, kwarg=None)
+
+        return ast.FunctionDef(
+            name=name,
+            args=args,
             body=body,
             decorator_list=[])
 
@@ -514,7 +522,11 @@ class Compiler:
                 self.param_loader,
             ],
             body=tmpl)
-        tmpl_module = ast.Module([tmpl_wrapper])
+
+        if sys.version_info[:3] >= (3, 8, 0):
+            tmpl_module = ast.Module([tmpl_wrapper], type_ignores=[])
+        else:
+            tmpl_module = ast.Module([tmpl_wrapper])
 
         ast.fix_missing_locations(tmpl_module)
 
