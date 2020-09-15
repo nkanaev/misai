@@ -14,5 +14,5 @@ example
         {{ #end }}
     {{ #end }}
 
-.. image:: https://github.com/nkanaev/misai/workflows/test/badge.svg?branch=master
+.. image:: https://github.com/nkanaev/misai/workflows/test/badge.svg
     :target: https://github.com/nkanaev/misai/actions
