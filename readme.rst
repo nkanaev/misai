@@ -14,9 +14,5 @@ example
         {{ #end }}
     {{ #end }}
 
-
-tests
------
-
-.. image:: https://travis-ci.org/nkanaev/misai.svg?branch=master
-    :target: https://travis-ci.org/nkanaev/misai
+.. image:: https://github.com/nkanaev/misai/workflows/test/badge.svg?branch=master
+    :target: https://github.com/nkanaev/misai/actions
